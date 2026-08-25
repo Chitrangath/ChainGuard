@@ -5,6 +5,7 @@ import { RiskScore } from "@/components/RiskScore";
 import { DeploymentGate } from "@/components/DeploymentGate";
 import { MetricsCard } from "@/components/MetricsCard";
 import { FindingTable } from "@/components/FindingTable";
+import { AnalysisControls } from "@/components/AnalysisControls";
 
 export const dynamic = "force-dynamic";
 
@@ -148,15 +149,19 @@ export default async function ProjectPage({
             Created {new Date(project.createdAt).toLocaleDateString()}
           </p>
         </div>
-        <button
-          disabled
-          className="inline-flex items-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          Run Analysis
-        </button>
+        <AnalysisControls
+          projectId={project.id}
+          latestAnalysis={
+            project.latestAnalysis
+              ? { id: project.latestAnalysis.id, status: project.latestAnalysis.status }
+              : null
+          }
+        />
       </div>
 
-      {project.latestAnalysis ? (
+      {project.latestAnalysis &&
+      project.latestAnalysis.status !== "QUEUED" &&
+      project.latestAnalysis.status !== "RUNNING" ? (
         <>
           <div className="mt-8 grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-1 flex items-center justify-center">
@@ -219,6 +224,15 @@ export default async function ProjectPage({
             </div>
           </div>
         </>
+      ) : project.latestAnalysis &&
+        (project.latestAnalysis.status === "QUEUED" ||
+          project.latestAnalysis.status === "RUNNING") ? (
+        <div className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-8 text-center dark:border-blue-800 dark:bg-blue-950">
+          <p className="text-sm text-blue-700 dark:text-blue-300">
+            Analysis is {project.latestAnalysis.status.toLowerCase()}...
+            Security scanning will be implemented in Phase 4.
+          </p>
+        </div>
       ) : (
         <div className="mt-8 rounded-lg border border-dashed border-zinc-300 p-8 text-center dark:border-zinc-700">
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
