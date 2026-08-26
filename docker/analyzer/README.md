@@ -6,9 +6,9 @@ This Docker image provides the isolated execution environment for Solidity secur
 
 ## Tools Included
 
-- **Foundry** (forge) - Solidity compilation and testing
-- **Slither** - Static security analysis
-- **Git** - Repository cloning
+- **Foundry** (forge) v1.7.1 - Solidity compilation and testing
+- **Slither** v0.11.6 - Static security analysis
+- **Git** v2.39.5 - Repository cloning
 - **Python 3** - Required by Slither
 
 ## Build
