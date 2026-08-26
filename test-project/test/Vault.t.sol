@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "forge-std/Test.sol";
+import "helpers/Test.sol";
 import "../src/Vault.sol";
 
 contract VaultTest is Test {
     Vault vault;
     address user = address(0xBEEF);
 
-    function setUp() public {
+    function setUp() public override {
         vault = new Vault();
         vm.deal(user, 100 ether);
     }
