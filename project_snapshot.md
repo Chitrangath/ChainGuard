@@ -1,7 +1,7 @@
 # Project Snapshot: ChainGuard
 
 *Generated on: 2026-08-26*
-*Snapshot Version: 1.0*
+*Snapshot Version: 2.0*
 
 ## 1. Context State & Goals
 
@@ -11,11 +11,11 @@ ChainGuard is a full-stack Smart Contract DevSecOps platform. It allows a develo
 
 ### Current Status
 
-MVP — Phases 1-3 committed. Phase 4 (real security engine) is planned but NOT implemented.
+MVP — Phases 1-3 committed. Phase 4 (real security engine) implemented and committed. Docker analyzer image built and verified.
 
 ### Current Objective
 
-Complete Phase 4: Implement real Docker-based security analysis engine with Slither, Foundry execution inside container, Slither JSON parser, risk scoring engine, and deployment gate.
+Phase 4 is complete. Next: End-to-end integration test using the vulnerable test-project, then proceed to Phase 5 (Dashboard polish) or Phase 6 (Infrastructure: Redis, CI).
 
 ---
 
@@ -27,27 +27,27 @@ Complete Phase 4: Implement real Docker-based security analysis engine with Slit
 - Backend: Next.js Route Handlers
 - Database: PostgreSQL via Prisma v7.9.1 (`@prisma/adapter-pg` + `pg`)
 - Cache: Redis (planned, not yet implemented)
-- Blockchain: Foundry (forge 1.5.1 on host), Slither (to be installed in Docker)
+- Blockchain: Foundry (forge v1.7.1 in Docker), Slither v0.11.6 (in Docker)
 - Runtime: Node.js v24.19.0
-- Containerization: Docker (Dockerfile exists but broken)
+- Containerization: Docker (chainguard-analyzer image built)
 - Testing: Vitest 4.1.11
 - Package Manager: npm 12.0.2
 
 ### Architecture
 
 ```
-User → Next.js UI → POST /api/projects/[id]/analyze → creates QUEUED analysis
-                              ↓
+User -> Next.js UI -> POST /api/projects/[id]/analyze -> creates QUEUED analysis
+                              |
 Worker (polling every 3s) claims job via FOR UPDATE SKIP LOCKED
-                              ↓
+                              |
 Worker runs analysis:
   1. git clone (validated HTTPS URL only)
   2. Docker container: forge build, forge test, slither
-  3. Parse Slither JSON → findings
-  4. Risk engine → score + deployment gate
+  3. Parse Slither JSON -> findings
+  4. Risk engine -> score + deployment gate
   5. Store results in PostgreSQL
-                              ↓
-Frontend polls GET /api/analyses/[id] → displays results
+                              |
+Frontend polls GET /api/analyses/[id] -> displays results
 ```
 
 ### Repository Structure
@@ -75,19 +75,29 @@ chainguard/
 │   ├── lib/
 │   │   ├── api-error.ts
 │   │   ├── db.ts                  (Prisma client singleton)
-│   │   └── validation.ts          (Zod schemas)
+│   │   ├── validation.ts          (Zod schemas)
+│   │   ├── risk-engine.ts         (NEW: PRD scoring model)
+│   │   └── analysis-parser.ts     (NEW: Slither JSON parser)
 │   └── generated/prisma/          (auto-generated Prisma client)
 ├── worker/
 │   ├── index.ts                   (main loop: polling, job claiming)
-│   ├── analyzer.ts                (PLACEHOLDER - returns { success: true })
+│   ├── analyzer.ts                (REWRITTEN: real Docker execution)
 │   ├── db.ts                      (worker Prisma client)
 │   └── __tests__/
-│       ├── analyzer.test.ts
-│       └── state-transitions.test.ts
-├── docker/analyzer/Dockerfile     (BROKEN - Foundry install fails)
-├── test-project/                  (INCOMPLETE - needs fixes)
-│   ├── src/Vault.sol              (reentrancy vulnerability - OK)
-│   └── test/Vault.t.sol          (MALFORMED - missing contract wrapper)
+│       ├── analyzer.test.ts       (UPDATED: URL validation tests)
+│       ├── state-transitions.test.ts
+│       └── risk-engine.test.ts    (NEW: 14 risk engine tests)
+├── docker/
+│   └── analyzer/
+│       ├── Dockerfile             (REWRITTEN: node:20-bookworm-slim + forge v1.7.1 + slither v0.11.6)
+│       └── README.md              (NEW: image documentation)
+├── scripts/
+│   └── setup-test-repo.sh         (NEW: init bare git repo for test-project)
+├── test-project/
+│   ├── foundry.toml               (NEW)
+│   ├── src/Vault.sol              (reentrancy vulnerability)
+│   ├── test/Vault.t.sol           (REWRITTEN: proper Foundry test)
+│   └── README.md                  (NEW: vulnerability warning)
 ├── prisma/schema.prisma
 ├── docs/Chain_guard_PRD_MVP.md
 ├── package.json
@@ -98,12 +108,12 @@ chainguard/
 
 - Worker never executes untrusted code directly on host
 - All repo URLs validated via Zod regex: `^https:\/\/github\.com\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+(?:\/.*)?$`
-- Docker container flags: `--network none`, `--read-only`, `--cap-drop=ALL`, `--memory`, `--cpus`, `--pids-limit`, `--security-opt=no-new-privileges`
+- Docker container flags: `--network none`, `--read-only`, `--cap-drop=ALL`, `--memory=2g`, `--cpus=2`, `--pids-limit=512`, `--security-opt=no-new-privileges`
 - No `--privileged`, no `--network host`, no Docker socket mounts
 - Worker uses atomic job claiming: `FOR UPDATE SKIP LOCKED`
 - Prisma v7 requires driver adapter (`@prisma/adapter-pg` + `pg`)
 - Zod v4 for validation
-- 120s timeout for analysis execution
+- 120s timeout for tool execution, 300s overall timeout
 - Infrastructure failure vs valid analysis result distinction required
 
 ---
@@ -115,40 +125,32 @@ chainguard/
 - Phase 1 (commit `6ec16d6`): Next.js skeleton, Prisma schema, pages, components, Tailwind, ESLint, TypeScript, production build
 - Phase 2 (commit `770d522`): Project CRUD API, Dashboard, Project detail page, Create Project form, 17 tests
 - Phase 3 (commit `bbf46eb`/`1cd7547`): POST analyze endpoint, GET analysis status, worker with atomic job claiming, 3s polling, stale job detection, AnalysisControls with polling, 28 tests total
+- Phase 4 (commit `9e01e58`): Risk engine, Slither parser, Docker analyzer execution, test-project, 44 tests total
+- Phase 4 Docker fix (commit `efa05c9`): Pinned Foundry v1.7.1, fixed pip install, verified image
 
 ### In Progress (NOT committed)
 
-- Phase 4: Only placeholder files exist. No real analysis logic.
-  - `worker/analyzer.ts` is a stub returning `{ success: true }`
-  - `docker/analyzer/Dockerfile` exists but Foundry install fails (exit code 127)
-  - `test-project/src/Vault.sol` has correct reentrancy vulnerability
-  - `test-project/test/Vault.t.sol` is MALFORMED
+None — all Phase 4 work is committed.
 
-### Planned (Phase 4 remaining)
+### Planned (next steps)
 
-- Fix `docker/analyzer/Dockerfile` — use `node:20-bookworm-slim`, download Foundry binaries from GitHub releases, install slither via pip
-- Create `src/lib/risk-engine.ts` — risk score calculation (100 base, deductions per severity)
-- Create `src/lib/analysis-parser.ts` — Slither JSON parser, severity mapping
-- Rewrite `worker/analyzer.ts` — real Docker execution pipeline
-- Create `worker/__tests__/risk-engine.test.ts` — 10+ tests per PRD spec
-- Fix `test-project/test/Vault.t.sol` — proper Foundry test with contract wrapper
-- Create `test-project/foundry.toml` and `test-project/README.md`
-- Update `src/app/projects/[id]/page.tsx` — remove "Phase 4" placeholder text
-- Create `scripts/setup-test-repo.sh` — init bare git repo for local test-project cloning
+- End-to-end integration test with test-project (requires PostgreSQL running)
+- Phase 5: Dashboard polish, analysis history improvements
+- Phase 6: Redis caching, Docker Compose, CI pipeline
+- Phase 7: README, architecture diagram, production deployment
 
 ### Known Technical Debt / Bugs
 
-- `test-project/test/Vault.t.sol` is malformed — needs complete rewrite
-- `docker/analyzer/Dockerfile` fails to install Foundry — needs complete rewrite
-- `worker/analyzer.ts` is a placeholder — needs real implementation
-- No risk engine exists yet
-- No Slither parser exists yet
-- `src/app/projects/[id]/page.tsx` has "Phase 4" placeholder text
+- End-to-end test not yet performed (requires PostgreSQL + Docker together)
+- Redis not implemented (PRD says "after core functionality works")
+- No Docker Compose yet for easy local dev
+- No CI pipeline yet
 
 ### Important Decisions
 
-- Docker base image: `node:20-bookworm-slim`
-- Foundry in Docker: Download tarballs from GitHub releases (bypasses broken `foundryup`)
+- Docker base image: `node:20-bookworm-slim` (has bash, apt, Node.js)
+- Foundry in Docker: Download tarballs from GitHub releases pinned to v1.7.1
+- Slither in Docker: pip install with `--break-system-packages` on Debian bookworm
 - Test repo URL: Local bare git repo (worker clones from local path)
 - Risk engine: Start at 100, CRITICAL=-30, HIGH=-15, MEDIUM=-7, LOW=-2, compilation FAIL=-20, test FAIL=-10
 - Deployment gate: READY if score>=80 AND 0 criticals AND compile=PASS AND tests=PASS
@@ -167,28 +169,36 @@ enum TestStatus { PASS FAIL }
 enum Severity { CRITICAL HIGH MEDIUM LOW }
 ```
 
-### Worker Job Claiming (atomic)
+### Risk Engine Signature
 
 ```typescript
-const rows = await tx.$queryRawUnsafe<{ id: string; projectId: string }[]>(
-  `SELECT id, "projectId" FROM analyses
-   WHERE status = 'QUEUED'
-   ORDER BY "createdAt" ASC
-   LIMIT 1
-   FOR UPDATE SKIP LOCKED`,
-);
+export function calculateRisk(input: RiskInput): RiskResult {
+  // input: { severityCounts, compilationStatus, testStatus }
+  // result: { riskScore, deploymentStatus, criticalFindings }
+}
 ```
 
-### AnalysisControls Polling
+### Slither Parser Signature
 
-- Polls every 2000ms via `setInterval`
-- Stops on terminal status (COMPLETED or FAILED)
-- Uses `mountedRef` for cleanup
+```typescript
+export function parseSlitherOutput(rawJson: string): ParsedFinding[] {
+  // ParsedFinding: { severity, type, contract, file, line, description, source }
+}
+```
 
-### Foundry Binary Download URL (for Dockerfile)
+### Docker Analyzer Command
 
 ```
-https://github.com/foundry-rs/foundry/releases/download/stable/foundry_nightly_linux_amd64.tar.gz
+docker run --rm --network none --read-only --cap-drop=ALL \
+  --security-opt=no-new-privileges --memory=2g --cpus=2 --pids-limit=512 \
+  -v <workspace>:/project:ro -v <workspace>/output:/tmp/output:rw \
+  chainguard-analyzer:latest <command>
+```
+
+### Foundry Binary Download URL
+
+```
+https://github.com/foundry-rs/foundry/releases/download/v1.7.1/foundry_v1.7.1_linux_amd64.tar.gz
 ```
 
 ---
@@ -200,8 +210,7 @@ https://github.com/foundry-rs/foundry/releases/download/stable/foundry_nightly_l
 - Node.js v24.19.0
 - npm 12.0.2
 - PostgreSQL (running on localhost:5432)
-- Docker (for building analyzer image)
-- Foundry forge 1.5.1 (on host)
+- Docker (for building and running analyzer image)
 - Git 2.43.0
 
 ### Environment Variables
@@ -225,30 +234,28 @@ npm run dev          # Next.js dev server
 npm run worker       # Start worker (tsx worker/index.ts)
 
 # Test
-npm run test         # vitest run
+npm run test         # vitest run (44 tests)
 npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
 npm run build        # next build (production)
 
 # Docker
-docker build -t chainguard-analyzer:latest docker/analyzer/
+docker build -t chainguard-analyzer -f docker/analyzer/Dockerfile .
+docker run --rm chainguard-analyzer forge --version
+docker run --rm chainguard-analyzer slither --version
+docker run --rm chainguard-analyzer git --version
+
+# Test repo setup
+bash scripts/setup-test-repo.sh
 ```
 
 ---
 
 ## 6. Precise Next Steps
 
-1. **Fix `test-project/test/Vault.t.sol`** — Add proper Foundry test wrapper
-2. **Create `test-project/foundry.toml`** — Basic Foundry config
-3. **Create `src/lib/risk-engine.ts`** — Risk score + deployment gate
-4. **Create `src/lib/analysis-parser.ts`** — Slither JSON parser + severity mapping
-5. **Create `worker/__tests__/risk-engine.test.ts`** — Unit tests
-6. **Rewrite `docker/analyzer/Dockerfile`** — node:20-bookworm-slim, GitHub tarballs, slither via pip
-7. **Rewrite `worker/analyzer.ts`** — Real Docker execution
-8. **Update `worker/index.ts`** — Wire in real analyzer, workspace cleanup
-9. **Update `src/app/projects/[id]/page.tsx`** — Remove placeholder text
-10. **Run verification** — lint, typecheck, test, build
-11. **Git commit** — `feat: implement analysis engine with Docker, risk scoring, and Slither integration`
+1. **Perform end-to-end integration test** — Set up PostgreSQL, run worker, create project with test-project URL, verify findings persist and dashboard displays results
+2. **Commit snapshot update** — Stage project_snapshot.md
+3. **Decide next phase** — Phase 5 (Dashboard polish) or Phase 6 (Redis, Docker Compose, CI)
 
 ---
 
@@ -257,10 +264,10 @@ docker build -t chainguard-analyzer:latest docker/analyzer/
 - **DO NOT modify** `src/lib/db.ts`, `worker/db.ts`, `prisma/schema.prisma`, or Prisma-generated files unless required
 - **DO NOT modify** `worker/index.ts` job claiming logic (`FOR UPDATE SKIP LOCKED`) — it works
 - **DO NOT modify** `src/components/AnalysisControls.tsx` polling logic — it works
-- `test-project/test/Vault.t.sol` is MALFORMED — must be completely rewritten
-- `docker/analyzer/Dockerfile` is completely broken — rewrite from scratch
-- The `foundryup` install script does NOT work in Docker — use direct GitHub binary downloads
-- Docker is NOT available in the current WSL 2 environment — Dockerfile should be correct but cannot be built locally
-- `test-project/src/Vault.sol` reentrancy vulnerability is correct — do NOT modify
-- Phase 3 is committed and working — all 28 existing tests must continue to pass
-- Git commits: `6ec16d6` → `770d522` → `bbf46eb` → `1cd7547` (all on main branch)
+- `docker/analyzer/Dockerfile` is WORKING — verified with forge v1.7.1, slither v0.11.6, git v2.39.5
+- `worker/analyzer.ts` handles the full pipeline: git clone, Docker execution, parsing, risk calculation, DB persistence
+- The analyzer handles both infrastructure failures (returns `success: false`) and analysis results (compilation/test failures are results, not failures)
+- Phase 3 is committed and working — all 44 tests must continue to pass
+- Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` (all on main branch)
+- The `test-project/src/Vault.sol` reentrancy vulnerability is correct — do NOT modify
+- The `test-project/test/Vault.t.sol` is a proper Foundry test — do NOT modify
