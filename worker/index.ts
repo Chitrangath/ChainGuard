@@ -63,20 +63,13 @@ async function processJob(job: { id: string; projectId: string }) {
       analysisId: job.id,
       projectId: job.projectId,
       repositoryUrl: project.repositoryUrl,
-      projectDir: "", // Will be set when git clone is implemented in Phase 4
+      projectDir: "",
     };
 
     const result = await runAnalysis(ctx);
 
     if (result.success) {
-      await db.analysis.update({
-        where: { id: job.id },
-        data: {
-          status: "COMPLETED",
-          completedAt: new Date(),
-        },
-      });
-      log(`Analysis ${job.id} completed successfully`);
+      log(`Analysis ${job.id} completed`);
     } else {
       await db.analysis.update({
         where: { id: job.id },
@@ -85,7 +78,7 @@ async function processJob(job: { id: string; projectId: string }) {
           completedAt: new Date(),
         },
       });
-      log(`Analysis ${job.id} failed: ${result.error}`);
+      log(`Analysis ${job.id} infrastructure failure: ${result.error}`);
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);

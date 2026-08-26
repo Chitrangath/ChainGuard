@@ -1,29 +1,31 @@
-FROM python:3.11-slim
+FROM node:20-bookworm-slim
 
-# Install system dependencies: git, wget, ca-certificates
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
-    wget \
+    curl \
     ca-certificates \
+    python3 \
+    python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # ===== Install Foundry =====
-# Download the Foundry install script
-RUN wget -q https://foundry.paradigm.xyz/install-foundry.sh -O /tmp/foundry-install.sh && \
-    chmod +x /tmp/foundry-install.sh && \
-    bash /tmp/foundry-install.sh -y 2>/dev/null && \
-    rm /tmp/foundry-install.sh && \
-    export PATH="/root/.foundry/bin:${PATH}" && \
-    forge --version
+# Download binaries directly from GitHub releases (bypasses foundryup)
+RUN curl -L --output /tmp/foundry.tar.gz \
+    https://github.com/foundry-rs/foundry/releases/download/stable/foundry_nightly_linux_amd64.tar.gz && \
+    tar -xzf /tmp/foundry.tar.gz -C /usr/local/bin && \
+    rm /tmp/foundry.tar.gz
+
+# Verify Foundry installation
+RUN forge --version
 
 # ===== Install Slither =====
-# Install slither-analyzer via pip
-RUN pip install --no-cache-dir slither-analyzer
+RUN pip3 install --no-cache-dir slither-analyzer
 
 # Verify Slither installation
 RUN slither --version
 
-# Verify Git is available
+# Verify Git
 RUN git --version
 
 WORKDIR /app

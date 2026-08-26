@@ -230,7 +230,6 @@ export default async function ProjectPage({
         <div className="mt-8 rounded-lg border border-blue-200 bg-blue-50 p-8 text-center dark:border-blue-800 dark:bg-blue-950">
           <p className="text-sm text-blue-700 dark:text-blue-300">
             Analysis is {project.latestAnalysis.status.toLowerCase()}...
-            Security scanning will be implemented in Phase 4.
           </p>
         </div>
       ) : (
