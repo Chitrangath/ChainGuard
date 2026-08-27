@@ -14,7 +14,7 @@ interface SlitherElement {
     filename_relative: string;
     start: number;
     length: number;
-    lines?: string[];
+    lines?: (string | number)[];
   };
   type: string;
   name?: string;
@@ -59,12 +59,16 @@ function extractLocation(elements: SlitherElement[]): { file: string | null; lin
   for (const el of elements) {
     const mapping = el.source_mapping;
     if (mapping?.filename_relative) {
-      const line = mapping.lines?.[0]
-        ? parseInt(mapping.lines[0].split("-")[0], 10)
-        : null;
+      const firstLine = mapping.lines?.[0];
+      const line =
+        typeof firstLine === "number"
+          ? firstLine
+          : typeof firstLine === "string"
+            ? parseInt(firstLine.split("-")[0], 10)
+            : null;
       return {
         file: mapping.filename_relative,
-        line: isNaN(line!) ? null : line,
+        line: line !== null && isNaN(line) ? null : line,
       };
     }
   }

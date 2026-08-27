@@ -22,8 +22,24 @@ RUN curl -fL --output /tmp/foundry.tar.gz \
 # Verify Foundry installation
 RUN forge --version
 
+# ===== Pre-download solc 0.8.20 =====
+# Download the exact compiler binary so forge can use it offline via --use flag
+RUN curl -fL -o /usr/local/lib/solc-0.8.20 \
+    "https://github.com/ethereum/solidity/releases/download/v0.8.20/solc-static-linux" && \
+    chmod +x /usr/local/lib/solc-0.8.20 && \
+    /usr/local/lib/solc-0.8.20 --version
+
 # ===== Install Slither =====
 RUN pip3 install --no-cache-dir --break-system-packages slither-analyzer
+
+# Pre-cache solc 0.8.20 for Slither's solc-select dependency
+# solc-select stores artifacts at ~/.solc-select/artifacts/
+# At runtime, HOME=/tmp so artifacts must be copied from here
+# Make world-readable so non-root user can access
+RUN solc-select install 0.8.20 && \
+    solc-select use 0.8.20 && \
+    solc --version && \
+    chmod -R a+rX /root/.solc-select
 
 # Verify Slither installation
 RUN slither --version

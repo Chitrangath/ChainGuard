@@ -11,6 +11,7 @@ const execFileAsync = promisify(execFile);
 
 const WORKSPACE_BASE = "/tmp/guardrails";
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
+const SOLC_PATH = "/usr/local/lib/solc-0.8.20";
 const TOOL_TIMEOUT_MS = 120_000;
 const CLONE_TIMEOUT_MS = 60_000;
 const OVERALL_TIMEOUT_MS = 300_000;
@@ -27,6 +28,22 @@ export interface AnalysisContext {
 export interface AnalysisResult {
   success: boolean;
   error?: string;
+}
+
+export function parseTestOutput(testOutput: string): {
+  passedTests: number | null;
+  failedTests: number | null;
+  totalTests: number | null;
+} {
+  const passedMatch = testOutput.match(/(\d+)\s+(?:tests?\s+)?passed/);
+  const failedMatch = testOutput.match(/(\d+)\s+(?:tests?\s+)?failed/);
+  const passedTests = passedMatch ? parseInt(passedMatch[1], 10) : null;
+  const failedTests = failedMatch ? parseInt(failedMatch[1], 10) : null;
+  const totalTests =
+    passedTests !== null || failedTests !== null
+      ? (passedTests ?? 0) + (failedTests ?? 0)
+      : null;
+  return { passedTests, failedTests, totalTests };
 }
 
 function validateUrl(url: string): boolean {
@@ -66,7 +83,12 @@ async function runCommand(
 async function dockerRun(
   workspaceDir: string,
   command: string[],
+  outputDir?: string,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  const uid = process.getuid?.() ?? 1000;
+  const gid = process.getgid?.() ?? 1000;
+  const resolvedOutputDir = outputDir ?? path.join(workspaceDir, "output");
+
   const args = [
     "run",
     "--rm",
@@ -77,8 +99,12 @@ async function dockerRun(
     "--memory=2g",
     "--cpus=2",
     "--pids-limit=512",
-    "-v", `${workspaceDir}:/project:ro`,
-    "-v", `${workspaceDir}/output:/tmp/output:rw`,
+    "--user", `${uid}:${gid}`,
+    "--workdir", "/project",
+    "--tmpfs", "/tmp:rw,nosuid,nodev,exec,size=256m",
+    "--env", "HOME=/tmp",
+    "-v", `${workspaceDir}:/project`,
+    "-v", `${resolvedOutputDir}:/tmp/output:rw`,
     ANALYZER_IMAGE,
     ...command,
   ];
@@ -94,6 +120,25 @@ async function gitClone(
     timeout: CLONE_TIMEOUT_MS,
   });
   return { exitCode: result.exitCode, stderr: result.stderr };
+}
+
+function findFoundryProject(repoDir: string): string {
+  // Check if foundry.toml is at repo root
+  if (fs.existsSync(path.join(repoDir, "foundry.toml"))) {
+    return repoDir;
+  }
+  // Search one level deep for foundry.toml
+  const entries = fs.readdirSync(repoDir, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
+      const subDir = path.join(repoDir, entry.name);
+      if (fs.existsSync(path.join(subDir, "foundry.toml"))) {
+        return subDir;
+      }
+    }
+  }
+  // Fall back to repo root (will likely fail but preserves existing behavior)
+  return repoDir;
 }
 
 export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult> {
@@ -123,7 +168,8 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       data: { status: "RUNNING", startedAt: new Date() },
     });
 
-    const buildResult = await dockerRun(repoDir, ["forge", "build"]);
+    const foundryDir = findFoundryProject(repoDir);
+    const buildResult = await dockerRun(foundryDir, ["forge", "build", "--use", SOLC_PATH]);
     const compilationStatus = buildResult.exitCode === 0 ? "PASS" : "FAIL";
 
     let testStatus: "PASS" | "FAIL" = "PASS";
@@ -132,23 +178,27 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     let failedTests: number | null = null;
 
     if (compilationStatus === "PASS") {
-      const testResult = await dockerRun(repoDir, ["forge", "test"]);
+      const testResult = await dockerRun(foundryDir, ["forge", "test", "--use", SOLC_PATH]);
       testStatus = testResult.exitCode === 0 ? "PASS" : "FAIL";
 
       const testOutput = testResult.stdout + testResult.stderr;
-      const passedMatch = testOutput.match(/(\d+)\s+passing/);
-      const failedMatch = testOutput.match(/(\d+)\s+failing/);
-      if (passedMatch) passedTests = parseInt(passedMatch[1], 10);
-      if (failedMatch) failedTests = parseInt(failedMatch[1], 10);
-      if (passedTests !== null || failedTests !== null) {
-        totalTests = (passedTests ?? 0) + (failedTests ?? 0);
-      }
+      const counts = parseTestOutput(testOutput);
+      passedTests = counts.passedTests;
+      failedTests = counts.failedTests;
+      totalTests = counts.totalTests;
     }
 
     const slitherJsonPath = "/tmp/output/slither.json";
-    const slitherResult = await dockerRun(repoDir, [
-      "slither", ".", "--json", slitherJsonPath, "--fail-on", "high",
-    ]);
+    const slitherResult = await dockerRun(foundryDir, [
+      "sh", "-c",
+      [
+        `mkdir -p "$HOME/.svm/0.8.20"`,
+        `cp /usr/local/lib/solc-0.8.20 "$HOME/.svm/0.8.20/solc-0.8.20"`,
+        `chmod +x "$HOME/.svm/0.8.20/solc-0.8.20"`,
+        `cp -r /root/.solc-select "$HOME/.solc-select" 2>/dev/null || true`,
+        `slither . --json ${slitherJsonPath} --fail-high`,
+      ].join(" && "),
+    ], outputDir);
 
     let findings: ReturnType<typeof parseSlitherOutput> = [];
     const slitherJsonFile = path.join(outputDir, "slither.json");

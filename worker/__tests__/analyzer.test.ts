@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { runAnalysis, type AnalysisContext } from "../analyzer";
+import { runAnalysis, parseTestOutput, type AnalysisContext } from "../analyzer";
 
 vi.mock("../db", () => ({
   getDb: () => ({
@@ -11,6 +11,74 @@ vi.mock("../db", () => ({
     },
   }),
 }));
+
+describe("parseTestOutput", () => {
+  it("parses '3 passed' format (forge default)", () => {
+    const output =
+      "Suite result: ok. 3 passed; 0 failed; 0 skipped\n" +
+      "Ran 1 test suite: 3 tests passed, 0 failed, 0 skipped (3 total tests)";
+    const result = parseTestOutput(output);
+    expect(result.passedTests).toBe(3);
+    expect(result.failedTests).toBe(0);
+    expect(result.totalTests).toBe(3);
+  });
+
+  it("parses '3 tests passed' format", () => {
+    const output = "Ran 2 test suites: 3 tests passed, 0 failed";
+    const result = parseTestOutput(output);
+    expect(result.passedTests).toBe(3);
+    expect(result.failedTests).toBe(0);
+    expect(result.totalTests).toBe(3);
+  });
+
+  it("parses '1 failed' format", () => {
+    const output =
+      "Suite result: fail. 2 passed; 1 failed\n" +
+      "Ran 1 test suite: 2 tests passed, 1 failed";
+    const result = parseTestOutput(output);
+    expect(result.passedTests).toBe(2);
+    expect(result.failedTests).toBe(1);
+    expect(result.totalTests).toBe(3);
+  });
+
+  it("parses '1 test failed' format", () => {
+    const output = "Suite result: fail. 0 passed; 1 test failed";
+    const result = parseTestOutput(output);
+    expect(result.passedTests).toBe(0);
+    expect(result.failedTests).toBe(1);
+    expect(result.totalTests).toBe(1);
+  });
+
+  it("returns nulls for empty output", () => {
+    const result = parseTestOutput("");
+    expect(result.passedTests).toBeNull();
+    expect(result.failedTests).toBeNull();
+    expect(result.totalTests).toBeNull();
+  });
+
+  it("parses only passed when no failures", () => {
+    const output = "5 passed; 0 failed";
+    const result = parseTestOutput(output);
+    expect(result.passedTests).toBe(5);
+    expect(result.failedTests).toBe(0);
+    expect(result.totalTests).toBe(5);
+  });
+
+  it("handles mixed forge output", () => {
+    const output =
+      "No files changed, compilation skipped\n\n" +
+      "Ran 3 tests for test/Vault.t.sol:VaultTest\n" +
+      "[PASS] test_deposit() (gas: 41358)\n" +
+      "[PASS] test_withdraw() (gas: 50957)\n" +
+      "[PASS] test_revert_on_insufficient_balance() (gas: 14036)\n" +
+      "Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 5.54ms\n\n" +
+      "Ran 1 test suite in 143.45ms (5.54ms CPU time): 3 tests passed, 0 failed, 0 skipped (3 total tests)";
+    const result = parseTestOutput(output);
+    expect(result.passedTests).toBe(3);
+    expect(result.failedTests).toBe(0);
+    expect(result.totalTests).toBe(3);
+  });
+});
 
 describe("runAnalysis", () => {
   const baseContext: AnalysisContext = {
