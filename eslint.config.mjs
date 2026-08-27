@@ -12,6 +12,13 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Skills and scripts directories (not application code):
+    ".opencode/**",
+    ".agents/**",
+    ".claude/**",
+    "scripts/**",
+    "docker/**",
+    "worker/**",
   ]),
 ]);
 

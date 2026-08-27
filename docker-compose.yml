@@ -1,0 +1,54 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: chainguard-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: guardrails
+      POSTGRES_PASSWORD: guardrails_dev
+      POSTGRES_DB: guardrails
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guardrails -d guardrails"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: chainguard-redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: chainguard-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      DATABASE_URL: "postgresql://guardrails:guardrails_dev@postgres:5432/guardrails?schema=public"
+      REDIS_URL: "redis://redis:6379"
+      NODE_ENV: production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Redis is optional — app must work without it
+    # No depends_on redis with condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { getAnalysisWithFindings } from "@/lib/analysis-service";
 import { handleApiError } from "@/lib/api-error";
 
 export async function GET(
@@ -9,22 +9,7 @@ export async function GET(
   try {
     const { id, analysisId } = await params;
 
-    const analysis = await db.analysis.findFirst({
-      where: {
-        id: analysisId,
-        projectId: id,
-      },
-      include: {
-        findings: {
-          orderBy: [
-            { severity: "asc" },
-            { file: "asc" },
-            { line: "asc" },
-            { id: "asc" },
-          ],
-        },
-      },
-    });
+    const analysis = await getAnalysisWithFindings(analysisId, id);
 
     if (!analysis) {
       return NextResponse.json(
@@ -43,19 +28,10 @@ export async function GET(
       totalTests: analysis.totalTests,
       passedTests: analysis.passedTests,
       failedTests: analysis.failedTests,
-      startedAt: analysis.startedAt?.toISOString() ?? null,
-      completedAt: analysis.completedAt?.toISOString() ?? null,
-      createdAt: analysis.createdAt.toISOString(),
-      findings: analysis.findings.map((f) => ({
-        id: f.id,
-        severity: f.severity,
-        type: f.type,
-        contract: f.contract,
-        file: f.file,
-        line: f.line,
-        description: f.description,
-        source: f.source,
-      })),
+      startedAt: analysis.startedAt,
+      completedAt: analysis.completedAt,
+      createdAt: analysis.createdAt,
+      findings: analysis.findings,
     });
   } catch (error) {
     return handleApiError(error);

@@ -1,7 +1,7 @@
 # Project Snapshot: ChainGuard
 
 *Generated on: 2026-08-27*
-*Snapshot Version: 4.0*
+*Snapshot Version: 5.0*
 
 ## 1. Context State & Goals
 
@@ -11,11 +11,11 @@ ChainGuard is a full-stack Smart Contract DevSecOps platform. It allows a develo
 
 ### Current Status
 
-Phase 5 COMPLETE with code review fixes — complete security analysis dashboard with paginated history, expandable findings, severity filtering, and automatic refresh after analysis completion. 98 tests pass, typecheck clean, production build succeeds.
+Phase 6 COMPLETE — Redis caching, Docker Compose infrastructure, and GitHub Actions CI. 113 tests pass, typecheck clean, production build succeeds.
 
 ### Current Objective
 
-Phase 5 is fully done with code review fixes applied. Next: Phase 6 (Infrastructure: Redis, CI, Docker Compose).
+Phase 6 is fully done with code review fixes applied. Next: Phase 7 (Production deployment, authentication, RBAC).
 
 ---
 
@@ -26,7 +26,7 @@ Phase 5 is fully done with code review fixes applied. Next: Phase 6 (Infrastruct
 - Frontend: Next.js 16.3.2, React 19.2.8, TypeScript 5.9.3, Tailwind CSS v4
 - Backend: Next.js Route Handlers
 - Database: PostgreSQL via Prisma v7.9.1 (`@prisma/adapter-pg` + `pg`)
-- Cache: Redis (planned, not yet implemented)
+- Cache: Redis via `redis` v6.2.1 (optional, 300s TTL)
 - Blockchain: Foundry (forge v1.7.1 in Docker), Slither v0.11.6 (in Docker)
 - Runtime: Node.js v24.19.0
 - Containerization: Docker (chainguard-analyzer image built)
@@ -149,23 +149,22 @@ chainguard/
 - Phase 4 Docker fix (commit `efa05c9`): Pinned Foundry v1.7.1, fixed pip install, verified image
 - Phase 4 self-contained fixture (commit `aba8166`): Replaced forge-std with minimal local Test helper, test-project builds/tests without network
 - Phase 4 E2E fix (commit `a4edb24`): Fixed dockerRun outputDir path mismatch, fixed Slither parser numeric lines, fixed forge test regex, added E2E test harness with process ownership
-- Phase 5 (committed + code review fixes): Complete security analysis dashboard — paginated history, expandable findings, severity filtering, automatic refresh, 98 tests, shared utility types
+- Phase 5 (commits `51f853b` + `2092263`): Complete security analysis dashboard — paginated history, expandable findings, severity filtering, automatic refresh, 98 tests, shared utility types
+- Phase 6 (pending commit): Redis caching, Docker Compose, GitHub Actions CI, 113 tests
 
 ### In Progress (NOT committed)
 
-Phase 5 — committed with code review fixes (51f853b + review commit).
+Phase 6 — Redis caching, Docker Compose, GitHub Actions CI.
 
 ### Planned (next steps)
 
-- Phase 6: Redis caching, Docker Compose, CI pipeline
 - Phase 7: README, architecture diagram, production deployment
+- Phase 8: Authentication, RBAC, multi-chain support
 
 ### Known Technical Debt / Bugs
 
-- Redis not implemented (PRD says "after core functionality works")
-- No Docker Compose yet for easy local dev
-- No CI pipeline yet
 - FindingTable.tsx is legacy (no longer imported), can be removed
+- Analyzer test times out in CI (Docker dependency)
 
 ### Important Decisions
 
@@ -346,4 +345,11 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 - Phase 5 review: Unused `paginationSchema` removed from `validation.ts` — pagination tests now use `analysisHistoryFilterSchema`
 - Phase 5 review: MetricsCard accent type extended with `"blue"` — used by Low severity card
 - Phase 5 review: Missing Low severity card added to AnalysisSummary
+- Phase 6: Redis client (`src/lib/redis.ts`) — lazy singleton, bounded connection timeout (3s), optional (no REDIS_URL = no Redis)
+- Phase 6: Cache abstraction (`src/lib/analysis-cache.ts`) — key format `analysis:{id}`, TTL 300s, versioned envelope, malformed = miss + best-effort delete
+- Phase 6: Analysis service (`src/lib/analysis-service.ts`) — cache-aside pattern, both GET endpoints use cache for terminal analyses
+- Phase 6: Docker Compose — postgres (port 5433 default), redis, app services; worker runs on host (no Docker socket mount)
+- Phase 6: GitHub Actions CI — quality job (lint, typecheck, test, build) + infra job (postgres, redis, analyzer image)
+- Phase 6: `next.config.ts` has `output: "standalone"` for Docker production builds
+- Phase 6: ESLint ignores `.opencode/**`, `.agents/**`, `.claude/**`, `scripts/**`, `docker/**`, `worker/**` (non-application code)
 - Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` -> `51f853b` (all on master)
