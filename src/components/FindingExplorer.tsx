@@ -2,24 +2,13 @@
 
 import { useState, useMemo } from "react";
 import { findingFilterSchema } from "@/lib/validation";
-
-interface Finding {
-  id: string;
-  severity: string;
-  type: string;
-  contract: string | null;
-  file: string | null;
-  line: number | null;
-  description: string;
-  source: string;
-}
+import { countBySeverity, sortFindingsBySeverity } from "@/lib/analysis-utils";
+import type { FindingData } from "@/lib/analysis-utils";
 
 interface FindingExplorerProps {
-  findings: Finding[];
+  findings: FindingData[];
   analysisStatus: string;
 }
-
-const SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"] as const;
 
 const SEVERITY_FILTERS = [
   { label: "All", value: "ALL" },
@@ -36,36 +25,6 @@ const SEVERITY_BADGE_CLASSES: Record<string, string> = {
   LOW: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
 };
 
-function sortFindings(findings: Finding[]): Finding[] {
-  return [...findings].sort((a, b) => {
-    const aIdx = SEVERITY_ORDER.indexOf(a.severity as typeof SEVERITY_ORDER[number]);
-    const bIdx = SEVERITY_ORDER.indexOf(b.severity as typeof SEVERITY_ORDER[number]);
-    const severityDiff = aIdx - bIdx;
-    if (severityDiff !== 0) return severityDiff;
-    if (a.file && b.file) {
-      const fileDiff = a.file.localeCompare(b.file);
-      if (fileDiff !== 0) return fileDiff;
-    }
-    if (a.line !== null && b.line !== null) {
-      const lineDiff = a.line - b.line;
-      if (lineDiff !== 0) return lineDiff;
-    }
-    if (a.id < b.id) return -1;
-    if (a.id > b.id) return 1;
-    return 0;
-  });
-}
-
-function countBySeverity(findings: Finding[]) {
-  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-  for (const f of findings) {
-    if (f.severity in counts) {
-      counts[f.severity as keyof typeof counts]++;
-    }
-  }
-  return counts;
-}
-
 export function FindingExplorer({ findings, analysisStatus }: FindingExplorerProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState("ALL");
@@ -73,7 +32,7 @@ export function FindingExplorer({ findings, analysisStatus }: FindingExplorerPro
   const severityCounts = useMemo(() => countBySeverity(findings), [findings]);
 
   const filteredFindings = useMemo(() => {
-    const sorted = sortFindings(findings);
+    const sorted = sortFindingsBySeverity(findings);
     if (severityFilter === "ALL") return sorted;
     const result = findingFilterSchema.safeParse({ severity: severityFilter });
     if (!result.success) return sorted;
@@ -203,7 +162,7 @@ function FindingRow({
   badgeClass,
   onToggle,
 }: {
-  finding: Finding;
+  finding: FindingData;
   isExpanded: boolean;
   badgeClass: string;
   onToggle: () => void;

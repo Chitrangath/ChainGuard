@@ -2,7 +2,7 @@ interface MetricsCardProps {
   label: string;
   value: string | number;
   status?: "pass" | "fail" | "neutral";
-  accent?: "red" | "orange" | "yellow" | "green";
+  accent?: "red" | "orange" | "yellow" | "green" | "blue";
 }
 
 function accentBorderClass(accent: string | undefined): string {
@@ -15,6 +15,8 @@ function accentBorderClass(accent: string | undefined): string {
       return "border-l-yellow-500 dark:border-l-yellow-400";
     case "green":
       return "border-l-green-500 dark:border-l-green-400";
+    case "blue":
+      return "border-l-blue-500 dark:border-l-blue-400";
     default:
       return "";
   }

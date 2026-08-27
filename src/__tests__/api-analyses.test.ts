@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  paginationSchema,
   analysisHistoryFilterSchema,
   findingFilterSchema,
 } from "../lib/validation";

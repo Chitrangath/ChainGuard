@@ -1,36 +1,11 @@
 import { RiskScore } from "./RiskScore";
 import { DeploymentGate } from "./DeploymentGate";
 import { MetricsCard } from "./MetricsCard";
+import { countBySeverity } from "@/lib/analysis-utils";
+import type { AnalysisData } from "@/lib/analysis-utils";
 
 interface AnalysisSummaryProps {
-  analysis: {
-    id: string;
-    status: string;
-    riskScore: number | null;
-    deploymentStatus: string | null;
-    compilationStatus: string | null;
-    testStatus: string | null;
-    totalTests: number | null;
-    passedTests: number | null;
-    failedTests: number | null;
-    startedAt: string | null;
-    completedAt: string | null;
-    createdAt: string;
-    findings: Array<{
-      id: string;
-      severity: string;
-    }>;
-  };
-}
-
-function countBySeverity(findings: Array<{ severity: string }>) {
-  const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
-  for (const f of findings) {
-    if (f.severity in counts) {
-      counts[f.severity as keyof typeof counts]++;
-    }
-  }
-  return counts;
+  analysis: AnalysisData;
 }
 
 function formatDuration(startedAt: string | null, completedAt: string | null): string | null {
@@ -122,6 +97,11 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
             label="Medium"
             value={severityCounts.MEDIUM}
             accent={severityCounts.MEDIUM > 0 ? "yellow" : undefined}
+          />
+          <MetricsCard
+            label="Low"
+            value={severityCounts.LOW}
+            accent={severityCounts.LOW > 0 ? "blue" : undefined}
           />
         </div>
       )}

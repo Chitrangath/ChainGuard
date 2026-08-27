@@ -11,11 +11,11 @@ ChainGuard is a full-stack Smart Contract DevSecOps platform. It allows a develo
 
 ### Current Status
 
-Phase 5 COMPLETE — complete security analysis dashboard with paginated history, expandable findings, severity filtering, and automatic refresh after analysis completion. 98 tests pass, lint clean, typecheck clean, production build succeeds.
+Phase 5 COMPLETE with code review fixes — complete security analysis dashboard with paginated history, expandable findings, severity filtering, and automatic refresh after analysis completion. 98 tests pass, typecheck clean, production build succeeds.
 
 ### Current Objective
 
-Phase 5 is fully done. Next: Phase 6 (Infrastructure: Redis, CI, Docker Compose).
+Phase 5 is fully done with code review fixes applied. Next: Phase 6 (Infrastructure: Redis, CI, Docker Compose).
 
 ---
 
@@ -149,11 +149,11 @@ chainguard/
 - Phase 4 Docker fix (commit `efa05c9`): Pinned Foundry v1.7.1, fixed pip install, verified image
 - Phase 4 self-contained fixture (commit `aba8166`): Replaced forge-std with minimal local Test helper, test-project builds/tests without network
 - Phase 4 E2E fix (commit `a4edb24`): Fixed dockerRun outputDir path mismatch, fixed Slither parser numeric lines, fixed forge test regex, added E2E test harness with process ownership
-- Phase 5 (commit pending): Complete security analysis dashboard — paginated history, expandable findings, severity filtering, automatic refresh, 98 tests
+- Phase 5 (committed + code review fixes): Complete security analysis dashboard — paginated history, expandable findings, severity filtering, automatic refresh, 98 tests, shared utility types
 
 ### In Progress (NOT committed)
 
-Phase 5 — ready to commit.
+Phase 5 — committed with code review fixes (51f853b + review commit).
 
 ### Planned (next steps)
 
@@ -339,4 +339,11 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 - Phase 5: Terminal state triggers `router.refresh()` exactly once via `refreshCalledRef` guard
 - Phase 5: Polling failure shows "Polling interrupted" + Retry button after 3 consecutive failures
 - Phase 5: `AnalysisHistory` fetches pages via client-side API calls, not server re-renders
-- Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` (all on master)
+- Phase 5 review: `countBySeverity` extracted to `src/lib/analysis-utils.ts` — shared by AnalysisSummary and FindingExplorer
+- Phase 5 review: `AnalysisData`, `AnalysisSummaryData`, `FindingData` types extracted to `src/lib/analysis-utils.ts` — used by AnalysisView, AnalysisSummary, AnalysisHistory, FindingExplorer
+- Phase 5 review: `pollOnce` uses functional update (`setCurrentAnalysis(prev => ...)`) — no dependency on `currentAnalysis?.createdAt`
+- Phase 5 review: `router.refresh()` extracted to `triggerRefreshOnce` — called after state update, not inside updater
+- Phase 5 review: Unused `paginationSchema` removed from `validation.ts` — pagination tests now use `analysisHistoryFilterSchema`
+- Phase 5 review: MetricsCard accent type extended with `"blue"` — used by Low severity card
+- Phase 5 review: Missing Low severity card added to AnalysisSummary
+- Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` -> `51f853b` (all on master)

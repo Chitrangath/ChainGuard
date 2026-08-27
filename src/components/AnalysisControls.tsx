@@ -66,8 +66,8 @@ export function AnalysisControls({
     }
   }, []);
 
+  // pollOnce: no dependency on currentAnalysis — uses functional update where needed
   const pollOnce = useCallback(async (analysisId: string): Promise<boolean> => {
-    // Cancel any in-flight request
     if (abortRef.current) {
       abortRef.current.abort();
     }
@@ -83,13 +83,17 @@ export function AnalysisControls({
 
       if (res.ok) {
         const data = await res.json();
-        setCurrentAnalysis({ id: data.id, status: data.status, createdAt: currentAnalysis?.createdAt ?? "" });
+        // Use functional update — no dependency on currentAnalysis
+        setCurrentAnalysis((prev) => ({
+          id: data.id,
+          status: data.status,
+          createdAt: prev?.createdAt ?? "",
+        }));
         failuresRef.current = 0;
         setPollError(false);
         return !isTerminal(data.status);
       }
 
-      // HTTP error
       failuresRef.current++;
       if (failuresRef.current >= MAX_CONSECUTIVE_FAILURES) {
         setPollError(true);
@@ -108,7 +112,14 @@ export function AnalysisControls({
       }
       return true;
     }
-  }, [currentAnalysis?.createdAt]);
+  }, []); // No dependencies — uses functional update
+
+  const triggerRefreshOnce = useCallback(() => {
+    if (!refreshCalledRef.current) {
+      refreshCalledRef.current = true;
+      router.refresh();
+    }
+  }, [router]);
 
   const startPolling = useCallback((analysisId: string) => {
     stopPolling();
@@ -127,16 +138,7 @@ export function AnalysisControls({
         if (shouldContinue && mountedRef.current) {
           scheduleNext();
         } else if (mountedRef.current) {
-          // Terminal or max failures — refresh server data exactly once
-          if (!refreshCalledRef.current) {
-            refreshCalledRef.current = true;
-            setCurrentAnalysis((prev) => {
-              if (prev && isTerminal(prev.status)) {
-                router.refresh();
-              }
-              return prev;
-            });
-          }
+          triggerRefreshOnce();
           setPolling(false);
           failuresRef.current = 0;
         }
@@ -148,20 +150,12 @@ export function AnalysisControls({
       if (shouldContinue && mountedRef.current) {
         scheduleNext();
       } else if (mountedRef.current) {
-        if (!refreshCalledRef.current) {
-          refreshCalledRef.current = true;
-          setCurrentAnalysis((prev) => {
-            if (prev && isTerminal(prev.status)) {
-              router.refresh();
-            }
-            return prev;
-          });
-        }
+        triggerRefreshOnce();
         setPolling(false);
         failuresRef.current = 0;
       }
     });
-  }, [pollOnce, stopPolling, router]);
+  }, [pollOnce, stopPolling, triggerRefreshOnce]);
 
   // Start polling if there's an active analysis
   useEffect(() => {

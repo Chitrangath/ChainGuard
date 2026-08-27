@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createProjectSchema, paginationSchema, analysisHistoryFilterSchema, findingFilterSchema } from "../validation";
+import { createProjectSchema, analysisHistoryFilterSchema, findingFilterSchema } from "../validation";
 
 describe("createProjectSchema", () => {
   const validInput = {
@@ -108,9 +108,9 @@ describe("createProjectSchema", () => {
   });
 });
 
-describe("paginationSchema", () => {
+describe("pagination via analysisHistoryFilterSchema", () => {
   it("defaults to page 1, pageSize 10", () => {
-    const result = paginationSchema.safeParse({});
+    const result = analysisHistoryFilterSchema.safeParse({});
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.page).toBe(1);
@@ -119,7 +119,7 @@ describe("paginationSchema", () => {
   });
 
   it("accepts valid page and pageSize", () => {
-    const result = paginationSchema.safeParse({ page: "2", pageSize: "5" });
+    const result = analysisHistoryFilterSchema.safeParse({ page: "2", pageSize: "5" });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.page).toBe(2);
@@ -128,27 +128,27 @@ describe("paginationSchema", () => {
   });
 
   it("rejects page 0", () => {
-    const result = paginationSchema.safeParse({ page: "0" });
+    const result = analysisHistoryFilterSchema.safeParse({ page: "0" });
     expect(result.success).toBe(false);
   });
 
   it("rejects negative page", () => {
-    const result = paginationSchema.safeParse({ page: "-1" });
+    const result = analysisHistoryFilterSchema.safeParse({ page: "-1" });
     expect(result.success).toBe(false);
   });
 
   it("rejects pageSize exceeding 25", () => {
-    const result = paginationSchema.safeParse({ pageSize: "26" });
+    const result = analysisHistoryFilterSchema.safeParse({ pageSize: "26" });
     expect(result.success).toBe(false);
   });
 
   it("accepts pageSize at exactly 25", () => {
-    const result = paginationSchema.safeParse({ pageSize: "25" });
+    const result = analysisHistoryFilterSchema.safeParse({ pageSize: "25" });
     expect(result.success).toBe(true);
   });
 
   it("rejects pageSize of 0", () => {
-    const result = paginationSchema.safeParse({ pageSize: "0" });
+    const result = analysisHistoryFilterSchema.safeParse({ pageSize: "0" });
     expect(result.success).toBe(false);
   });
 });

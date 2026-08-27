@@ -1,26 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
-
-interface AnalysisSummary {
-  id: string;
-  status: string;
-  riskScore: number | null;
-  deploymentStatus: string | null;
-  compilationStatus: string | null;
-  testStatus: string | null;
-  totalTests: number | null;
-  passedTests: number | null;
-  failedTests: number | null;
-  startedAt: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  findingCount: number;
-}
+import type { AnalysisSummaryData } from "@/lib/analysis-utils";
 
 interface AnalysisHistoryProps {
   projectId: string;
-  analyses: AnalysisSummary[];
+  analyses: AnalysisSummaryData[];
   totalAnalyses: number;
   selectedAnalysisId: string | null;
   onSelectAnalysis: (analysisId: string) => void;

@@ -5,6 +5,7 @@ import { AnalysisControls } from "./AnalysisControls";
 import { AnalysisSummary } from "./AnalysisSummary";
 import { FindingExplorer } from "./FindingExplorer";
 import { AnalysisHistory } from "./AnalysisHistory";
+import type { AnalysisData, AnalysisSummaryData } from "@/lib/analysis-utils";
 
 interface AnalysisViewProps {
   project: {
@@ -19,45 +20,8 @@ interface AnalysisViewProps {
     status: string;
     createdAt: string;
   } | null;
-  selectedAnalysis: {
-    id: string;
-    status: string;
-    riskScore: number | null;
-    deploymentStatus: string | null;
-    compilationStatus: string | null;
-    testStatus: string | null;
-    totalTests: number | null;
-    passedTests: number | null;
-    failedTests: number | null;
-    startedAt: string | null;
-    completedAt: string | null;
-    createdAt: string;
-    findings: Array<{
-      id: string;
-      severity: string;
-      type: string;
-      contract: string | null;
-      file: string | null;
-      line: number | null;
-      description: string;
-      source: string;
-    }>;
-  } | null;
-  historyAnalyses: Array<{
-    id: string;
-    status: string;
-    riskScore: number | null;
-    deploymentStatus: string | null;
-    compilationStatus: string | null;
-    testStatus: string | null;
-    totalTests: number | null;
-    passedTests: number | null;
-    failedTests: number | null;
-    startedAt: string | null;
-    completedAt: string | null;
-    createdAt: string;
-    findingCount: number;
-  }>;
+  selectedAnalysis: AnalysisData | null;
+  historyAnalyses: AnalysisSummaryData[];
   totalAnalyses: number;
   selectedAnalysisId: string | null;
 }
