@@ -23,7 +23,6 @@ export function AnalysisControls({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [currentAnalysis, setCurrentAnalysis] = useState(activeAnalysis);
-  const [polling, setPolling] = useState(false);
   const [pollError, setPollError] = useState(false);
 
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -41,7 +40,7 @@ export function AnalysisControls({
 
   // Sync prop changes into state (e.g. after router.refresh)
   useEffect(() => {
-    setCurrentAnalysis(activeAnalysis);
+    setCurrentAnalysis(activeAnalysis); // eslint-disable-line react-hooks/set-state-in-effect
     if (activeAnalysis) {
       refreshCalledRef.current = false;
       failuresRef.current = 0;
@@ -60,9 +59,6 @@ export function AnalysisControls({
     if (abortRef.current) {
       abortRef.current.abort();
       abortRef.current = null;
-    }
-    if (mountedRef.current) {
-      setPolling(false);
     }
   }, []);
 
@@ -125,7 +121,6 @@ export function AnalysisControls({
     stopPolling();
     if (!mountedRef.current) return;
 
-    setPolling(true);
     failuresRef.current = 0;
     refreshCalledRef.current = false;
     setPollError(false);
@@ -139,7 +134,7 @@ export function AnalysisControls({
           scheduleNext();
         } else if (mountedRef.current) {
           triggerRefreshOnce();
-          setPolling(false);
+
           failuresRef.current = 0;
         }
       }, POLL_INTERVAL_MS);
@@ -151,7 +146,6 @@ export function AnalysisControls({
         scheduleNext();
       } else if (mountedRef.current) {
         triggerRefreshOnce();
-        setPolling(false);
         failuresRef.current = 0;
       }
     });

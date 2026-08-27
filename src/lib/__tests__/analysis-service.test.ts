@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mock the database and cache modules
 vi.mock("../db", () => ({
   db: {
     analysis: {
@@ -15,6 +14,9 @@ vi.mock("../analysis-cache", () => ({
   setCachedAnalysis: vi.fn().mockResolvedValue(undefined),
   isTerminal: vi.fn((status: string) => status === "COMPLETED" || status === "FAILED"),
 }));
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnyAnalysis = any;
 
 describe("analysis-service", () => {
   beforeEach(() => {
@@ -50,7 +52,7 @@ describe("analysis-service", () => {
       };
 
       const { db } = await import("../db");
-      vi.mocked(db.analysis.findUnique).mockResolvedValue(mockAnalysis as any);
+      vi.mocked(db.analysis.findUnique).mockResolvedValue(mockAnalysis as AnyAnalysis);
 
       const { getAnalysisById } = await import("../analysis-service");
       const result = await getAnalysisById("test-id");
@@ -79,7 +81,7 @@ describe("analysis-service", () => {
       };
 
       const { db } = await import("../db");
-      vi.mocked(db.analysis.findUnique).mockResolvedValue(mockAnalysis as any);
+      vi.mocked(db.analysis.findUnique).mockResolvedValue(mockAnalysis as AnyAnalysis);
 
       const { getAnalysisById } = await import("../analysis-service");
       const result = await getAnalysisById("test-id", "expected-proj");
@@ -128,7 +130,7 @@ describe("analysis-service", () => {
       };
 
       const { db } = await import("../db");
-      vi.mocked(db.analysis.findFirst).mockResolvedValue(mockAnalysis as any);
+      vi.mocked(db.analysis.findFirst).mockResolvedValue(mockAnalysis as AnyAnalysis);
 
       const { getAnalysisWithFindings } = await import("../analysis-service");
       const result = await getAnalysisWithFindings("test-id", "proj-id");

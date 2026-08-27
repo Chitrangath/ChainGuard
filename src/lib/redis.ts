@@ -1,7 +1,7 @@
 import { createClient, type RedisClientType } from "redis";
 
-const CONNECTION_TIMEOUT_MS = 3_000;
-const COMMAND_TIMEOUT_MS = 2_000;
+const CONNECTION_TIMEOUT_MS = 500;
+const COMMAND_TIMEOUT_MS = 500;
 
 let client: RedisClientType | null = null;
 let connecting = false;
@@ -108,4 +108,4 @@ export async function closeRedis(): Promise<void> {
   connectPromise = null;
 }
 
-export { COMMAND_TIMEOUT_MS };
+export { CONNECTION_TIMEOUT_MS, COMMAND_TIMEOUT_MS };
