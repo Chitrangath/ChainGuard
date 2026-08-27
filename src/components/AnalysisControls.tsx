@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { StatusBadge } from "./Badge";
 
 interface AnalysisControlsProps {
   projectId: string;
@@ -213,23 +214,7 @@ export function AnalysisControls({
 
       {currentAnalysis && (
         <div className="text-right">
-          <span className={`badge ${
-            currentAnalysis.status === "QUEUED"
-              ? "badge-queued"
-              : currentAnalysis.status === "RUNNING"
-                ? "badge-running"
-                : currentAnalysis.status === "COMPLETED"
-                  ? "badge-ready"
-                  : "badge-blocked"
-          }`}>
-            {currentAnalysis.status === "QUEUED"
-              ? "Queued"
-              : currentAnalysis.status === "RUNNING"
-                ? "Running"
-                : currentAnalysis.status === "COMPLETED"
-                  ? "Completed"
-                  : "Failed"}
-          </span>
+          <StatusBadge status={currentAnalysis.status} />
         </div>
       )}
 

@@ -153,6 +153,7 @@ export default async function DashboardPage() {
       {dbError && (
         <div
           className="mt-6 rounded-lg border p-6 text-center"
+          role="alert"
           style={{
             background: "var(--color-blocked-bg)",
             borderColor: "var(--color-blocked-border)",

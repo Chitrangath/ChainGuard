@@ -46,6 +46,7 @@
   --color-ready-border: #bbf7d0;
 
   --color-blocked: #dc2626;
+  --color-blocked-hover: #b91c1c;
   --color-blocked-bg: #fef2f2;
   --color-blocked-border: #fecaca;
 
@@ -97,6 +98,7 @@
     --color-ready-bg: #0a1f12;
     --color-ready-border: #1d5c30;
 
+    --color-blocked-hover: #ef4444;
     --color-blocked-bg: #2a1215;
     --color-blocked-border: #5c1d1d;
 
@@ -208,11 +210,11 @@ body {
 
 .btn-danger {
   background: var(--color-blocked);
-  color: #ffffff;
+  color: var(--text-inverse);
   border: 1px solid transparent;
 }
 .btn-danger:hover {
-  background: #b91c1c;
+  background: var(--color-blocked-hover);
 }
 
 .btn-sm {

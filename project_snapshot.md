@@ -11,7 +11,7 @@ ChainGuard is a full-stack Smart Contract DevSecOps platform. It allows a develo
 
 ### Current Status
 
-Phase 6.5 COMPLETE — Production-grade UI/UX polish. Security-operations aesthetic with consistent design system, professional iconography, accessible components, and responsive layouts. 123 tests pass, lint clean, typecheck clean, production build succeeds.
+Phase 6.5 COMPLETE — Production-grade UI/UX polish with verified design system, professional iconography, accessible components, responsive layouts, and visual verification at desktop (1440×900), tablet (768×1024), and mobile (390×844). 123 tests pass, lint clean, typecheck clean, production build succeeds.
 
 ### Current Objective
 
@@ -205,7 +205,8 @@ chainguard/
 - Phase 5 (commits `51f853b` + `2092263`): Complete security analysis dashboard + code review fixes
 - Phase 6 (commit `c509dff`): Redis client, cache abstraction, analysis service, Dockerfile, Docker Compose, GitHub Actions CI
 - Phase 6 fixes (commit `0db3ff9`): Redis timeout reduction, .dockerignore, health check, CI fix
-- Phase 6.5: Production-grade UI/UX polish with design system, professional iconography, accessible components
+- Phase 6.5 (commit `6d5d55f`): Production-grade UI/UX polish with design system, professional iconography, accessible components
+- Phase 6.5 verification (commit `TBD`): Removed hardcoded Tailwind colors from layout.tsx, tokenized .btn-danger hex values, replaced inline badge in AnalysisControls with StatusBadge, added role="alert" to dashboard error state
 
 ### In Progress
 
@@ -229,6 +230,11 @@ chainguard/
 - `prefers-reduced-motion` respected via CSS media query
 - Dark mode via CSS custom properties (not Tailwind `dark:` prefix)
 - FindingTable.tsx removed as dead code (was not imported anywhere)
+- `AnalysisControls` uses shared `StatusBadge` component (not manually constructed badge markup)
+- `.btn-danger` uses `var(--text-inverse)` and `var(--color-blocked-hover)` tokens (no hardcoded hex)
+- Body background uses `var(--background)` from globals.css (no hardcoded Tailwind color classes)
+- Dashboard error state uses `role="alert"` for screen reader announcement
+- Finding display shows only persisted analyzer data (description, source, contract, file, line) — no fabricated impact/recommendation
 
 ---
 
@@ -352,4 +358,9 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 - Phase 6.5: Icons are all SVG components in `src/components/icons.tsx` — no external icon library
 - Phase 6.5: Badge components (`StatusBadge`, `SeverityBadge`, `DeploymentBadge`) provide consistent status display
 - Phase 6.5: `FindingTable.tsx` was removed as dead code (was not imported anywhere)
-- Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` -> `51f853b` -> `2092263` -> `c509dff` -> `0db3ff9` (all on master)
+- Phase 6.5 verification: `layout.tsx` body uses `var(--background)` from globals.css — no `bg-zinc-*` classes
+- Phase 6.5 verification: `.btn-danger` uses `var(--text-inverse)` and `var(--color-blocked-hover)` tokens
+- Phase 6.5 verification: `AnalysisControls` imports and uses `StatusBadge` from `./Badge` (not inline badge)
+- Phase 6.5 verification: Dashboard error state div has `role="alert"` for screen readers
+- Phase 6.5 verification: Finding display fields are description, source, contract, file, line — no impact/recommendation
+- Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` -> `51f853b` -> `2092263` -> `c509dff` -> `0db3ff9` -> `6d5d55f` (all on master)
