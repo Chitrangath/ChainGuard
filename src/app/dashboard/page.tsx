@@ -14,7 +14,10 @@ export default async function DashboardPage() {
     updatedAt: string;
     latestRiskScore: number | null;
     latestDeploymentStatus: string | null;
+    lastAnalysisDate: string | null;
+    activeStatus: string | null;
   }> = [];
+  let dbError = false;
 
   try {
     const raw = await db.project.findMany({
@@ -24,8 +27,33 @@ export default async function DashboardPage() {
           orderBy: { createdAt: "desc" },
           take: 1,
         },
+        _count: {
+          select: {
+            analyses: {
+              where: { status: { in: ["QUEUED", "RUNNING"] } },
+            },
+          },
+        },
       },
     });
+
+    // Get active analyses for projects
+    const projectIds = raw.map((p) => p.id);
+    const activeAnalyses = await db.analysis.findMany({
+      where: {
+        projectId: { in: projectIds },
+        status: { in: ["QUEUED", "RUNNING"] },
+      },
+      select: {
+        projectId: true,
+        status: true,
+      },
+    });
+
+    const activeStatusMap = new Map<string, string>();
+    for (const a of activeAnalyses) {
+      activeStatusMap.set(a.projectId, a.status);
+    }
 
     projects = raw.map((p) => ({
       id: p.id,
@@ -36,9 +64,20 @@ export default async function DashboardPage() {
       updatedAt: p.updatedAt.toISOString(),
       latestRiskScore: p.analyses[0]?.riskScore ?? null,
       latestDeploymentStatus: p.analyses[0]?.deploymentStatus ?? null,
+      lastAnalysisDate: p.analyses[0]?.createdAt?.toISOString() ?? null,
+      activeStatus: activeStatusMap.get(p.id) ?? null,
     }));
-  } catch {
-    // Database may not be available; show empty state
+  } catch (error) {
+    // Only suppress expected database-unavailable errors
+    if (
+      error instanceof Error &&
+      (error.message.includes("ECONNREFUSED") ||
+        error.message.includes("connect"))
+    ) {
+      dbError = false; // Show empty state for connection issues
+    } else {
+      dbError = true;
+    }
   }
 
   return (
@@ -54,28 +93,39 @@ export default async function DashboardPage() {
           + New Project
         </Link>
       </div>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {projects.length > 0 ? (
-          projects.map((project) => (
-            <ProjectCard
-              key={project.id}
-              id={project.id}
-              name={project.name}
-              repositoryUrl={project.repositoryUrl}
-              description={project.description}
-              latestRiskScore={project.latestRiskScore}
-              latestDeploymentStatus={project.latestDeploymentStatus}
-              createdAt={project.createdAt}
-            />
-          ))
-        ) : (
-          <div className="col-span-full rounded-lg border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
-            <p className="text-sm text-zinc-500 dark:text-zinc-400">
-              No projects yet. Create one to get started.
-            </p>
-          </div>
-        )}
-      </div>
+
+      {dbError ? (
+        <div className="mt-6 rounded-lg border border-red-200 bg-red-50 p-6 text-center dark:border-red-800 dark:bg-red-950">
+          <p className="text-sm text-red-700 dark:text-red-300">
+            Unable to load projects. Please try again later.
+          </p>
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {projects.length > 0 ? (
+            projects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                id={project.id}
+                name={project.name}
+                repositoryUrl={project.repositoryUrl}
+                description={project.description}
+                latestRiskScore={project.latestRiskScore}
+                latestDeploymentStatus={project.latestDeploymentStatus}
+                lastAnalysisDate={project.lastAnalysisDate}
+                activeStatus={project.activeStatus}
+                createdAt={project.createdAt}
+              />
+            ))
+          ) : (
+            <div className="col-span-full rounded-lg border border-dashed border-zinc-300 p-12 text-center dark:border-zinc-700">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                No projects yet. Create one to get started.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

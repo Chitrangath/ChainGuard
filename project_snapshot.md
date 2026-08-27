@@ -1,7 +1,7 @@
 # Project Snapshot: ChainGuard
 
 *Generated on: 2026-08-27*
-*Snapshot Version: 3.0*
+*Snapshot Version: 4.0*
 
 ## 1. Context State & Goals
 
@@ -11,11 +11,11 @@ ChainGuard is a full-stack Smart Contract DevSecOps platform. It allows a develo
 
 ### Current Status
 
-Phase 4 COMPLETE — full E2E integration test passing. All 55 tests pass, lint clean, typecheck clean, production build succeeds.
+Phase 5 COMPLETE — complete security analysis dashboard with paginated history, expandable findings, severity filtering, and automatic refresh after analysis completion. 98 tests pass, lint clean, typecheck clean, production build succeeds.
 
 ### Current Objective
 
-Phase 4 is fully done. Next: Phase 5 (Dashboard polish) or Phase 6 (Infrastructure: Redis, CI, Docker Compose).
+Phase 5 is fully done. Next: Phase 6 (Infrastructure: Redis, CI, Docker Compose).
 
 ---
 
@@ -50,7 +50,12 @@ Worker runs analysis:
   7. Risk engine -> score + deployment gate
   8. Store results in PostgreSQL
                               |
-Frontend polls GET /api/analyses/[id] -> displays results
+Dashboard:
+  Server queries: project identity, active analysis, bounded history (10 items)
+  Client: AnalysisView orchestrates polling, selection, pagination
+  Polling: GET /api/analyses/{id} (compact, no findings)
+  Selection: ?analysisId= search param triggers server re-render
+  Terminal state: router.refresh() re-fetches server data exactly once
 ```
 
 ### Repository Structure
@@ -63,24 +68,32 @@ chainguard/
 │   │   │   ├── projects/route.ts          (POST create, GET list)
 │   │   │   ├── projects/[id]/route.ts     (GET detail)
 │   │   │   ├── projects/[id]/analyze/route.ts  (POST start analysis)
-│   │   │   └── analyses/[id]/route.ts     (GET analysis status)
-│   │   ├── dashboard/page.tsx
-│   │   ├── projects/[id]/page.tsx
+│   │   │   ├── projects/[id]/analyses/route.ts (GET paginated history)
+│   │   │   ├── projects/[id]/analyses/[analysisId]/route.ts (GET selected analysis + findings)
+│   │   │   └── analyses/[id]/route.ts     (GET analysis status — compact)
+│   │   ├── dashboard/page.tsx             (server: error states, active status)
+│   │   ├── projects/[id]/page.tsx         (server: bounded queries, search param selection)
 │   │   └── projects/new/page.tsx
 │   ├── components/
-│   │   ├── AnalysisControls.tsx   (Run Analysis button + polling)
+│   │   ├── AnalysisControls.tsx   (rewritten: setTimeout polling, AbortController, retry, aria-live)
+│   │   ├── AnalysisHistory.tsx    (NEW: paginated selectable history)
+│   │   ├── AnalysisSummary.tsx    (NEW: risk + metrics + deployment gate + timestamps)
+│   │   ├── AnalysisView.tsx       (NEW: orchestrator component)
 │   │   ├── DeploymentGate.tsx
-│   │   ├── FindingTable.tsx
-│   │   ├── MetricsCard.tsx
+│   │   ├── FindingExplorer.tsx    (NEW: severity filter + expandable rows)
+│   │   ├── FindingTable.tsx       (legacy, no longer imported)
+│   │   ├── MetricsCard.tsx        (updated: severity accent borders)
 │   │   ├── Navbar.tsx
-│   │   ├── ProjectCard.tsx
+│   │   ├── ProjectCard.tsx        (updated: last analysis date, active status)
 │   │   └── RiskScore.tsx
 │   ├── lib/
 │   │   ├── api-error.ts
 │   │   ├── db.ts                  (Prisma client singleton)
-│   │   ├── validation.ts          (Zod schemas)
+│   │   ├── validation.ts          (Zod schemas: pagination, analysis filter, finding filter)
 │   │   ├── risk-engine.ts         (risk scoring: 100 - deductions)
 │   │   └── analysis-parser.ts     (Slither JSON parser, handles numeric lines)
+│   ├── __tests__/
+│   │   └── api-analyses.test.ts   (NEW: pagination, filtering, sort, severity count tests)
 │   └── generated/prisma/          (auto-generated Prisma client)
 ├── worker/
 │   ├── index.ts                   (main loop: polling, job claiming)
@@ -88,7 +101,7 @@ chainguard/
 │   ├── db.ts                      (worker Prisma client)
 │   └── __tests__/
 │       ├── analyzer.test.ts       (URL validation + parseTestOutput tests)
-│       ├── analysis-parser.test.ts (NEW: Slither parser tests)
+│       ├── analysis-parser.test.ts (Slither parser tests)
 │       ├── state-transitions.test.ts
 │       └── risk-engine.test.ts    (risk engine tests)
 ├── docker/
@@ -97,13 +110,13 @@ chainguard/
 │       └── README.md
 ├── scripts/
 │   ├── setup-test-repo.sh         (init bare git repo for test-project)
-│   └── e2e-test.sh                (NEW: production-path E2E test harness)
+│   └── e2e-test.sh                (production-path E2E test harness)
 ├── test-project/
 │   ├── foundry.toml               (solc_version = "0.8.20", remappings for helpers/)
 │   ├── src/Vault.sol              (reentrancy vulnerability fixture)
 │   ├── test/
 │   │   ├── Vault.t.sol            (Foundry test using local Test helper)
-│   │   └── helpers/Test.sol       (NEW: minimal forge-std replacement)
+│   │   └── helpers/Test.sol       (minimal forge-std replacement)
 │   └── README.md
 ├── prisma/schema.prisma
 ├── docs/Chain_guard_PRD_MVP.md
@@ -136,14 +149,14 @@ chainguard/
 - Phase 4 Docker fix (commit `efa05c9`): Pinned Foundry v1.7.1, fixed pip install, verified image
 - Phase 4 self-contained fixture (commit `aba8166`): Replaced forge-std with minimal local Test helper, test-project builds/tests without network
 - Phase 4 E2E fix (commit `a4edb24`): Fixed dockerRun outputDir path mismatch, fixed Slither parser numeric lines, fixed forge test regex, added E2E test harness with process ownership
+- Phase 5 (commit pending): Complete security analysis dashboard — paginated history, expandable findings, severity filtering, automatic refresh, 98 tests
 
 ### In Progress (NOT committed)
 
-None — all Phase 4 work is committed.
+Phase 5 — ready to commit.
 
 ### Planned (next steps)
 
-- Phase 5: Dashboard polish, analysis history improvements, filtering, pagination
 - Phase 6: Redis caching, Docker Compose, CI pipeline
 - Phase 7: README, architecture diagram, production deployment
 
@@ -152,6 +165,7 @@ None — all Phase 4 work is committed.
 - Redis not implemented (PRD says "after core functionality works")
 - No Docker Compose yet for easy local dev
 - No CI pipeline yet
+- FindingTable.tsx is legacy (no longer imported), can be removed
 
 ### Important Decisions
 
@@ -164,6 +178,12 @@ None — all Phase 4 work is committed.
 - Deployment gate: READY if score>=80 AND 0 criticals AND compile=PASS AND tests=PASS
 - forge-std replaced with minimal local Test helper to keep test-project self-contained (no network, no `forge install`)
 - test-project/foundry.toml has `remappings = ["helpers/=test/helpers/"]` for the local Test helper
+- Phase 5: Analysis selection uses `?analysisId=` search param — server re-renders with selected analysis findings
+- Phase 5: Polling uses recursive setTimeout with AbortController (no overlapping requests)
+- Phase 5: Terminal state triggers exactly one `router.refresh()` via Next.js 16 `useRouter()` from `next/navigation`
+- Phase 5: History is bounded (10 items per page, max pageSize 25) via Zod-validated pagination
+- Phase 5: Findings sorted by severity (CRITICAL→LOW), then file ASC, line ASC, id ASC
+- Phase 5: Analysis numbering uses shortened ID (not sequential #N) to avoid inaccurate counts across pagination
 
 ---
 
@@ -279,7 +299,7 @@ npm run dev          # Next.js dev server
 npm run worker       # Start worker (tsx worker/index.ts)
 
 # Test
-npm test             # vitest run (55 tests)
+npm test             # vitest run (98 tests)
 npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
 npm run build        # next build (production)
@@ -295,9 +315,8 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 
 ## 6. Precise Next Steps
 
-1. **Decide next phase** — Phase 5 (Dashboard polish, history, filtering, pagination) or Phase 6 (Redis, Docker Compose, CI)
-2. **Implement chosen phase** based on PRD priorities
-3. **Commit and verify** with tests
+1. **Phase 6** — Redis caching, Docker Compose, CI pipeline
+2. **Phase 7** — README, architecture diagram, production deployment
 
 ---
 
@@ -305,7 +324,6 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 
 - **DO NOT modify** `src/lib/db.ts`, `worker/db.ts`, `prisma/schema.prisma`, or Prisma-generated files unless required
 - **DO NOT modify** `worker/index.ts` job claiming logic (`FOR UPDATE SKIP LOCKED`) — it works
-- **DO NOT modify** `src/components/AnalysisControls.tsx` polling logic — it works
 - `docker/analyzer/Dockerfile` is WORKING — verified with forge v1.7.1, slither v0.11.6, solc 0.8.20
 - `worker/analyzer.ts` handles the full pipeline: git clone, Docker execution, parsing, risk calculation, DB persistence
 - `dockerRun()` outputDir fix is critical — Slither invocation MUST pass `outputDir` (wsDir/output) separately from `workspaceDir` (foundryDir) to avoid path mismatch
@@ -315,4 +333,10 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 - The `--tmpfs /tmp:rw,nosuid,nodev,exec,size=256m` flag is required — Docker auto-adds `noexec` which prevents binary execution
 - Slither parser handles both numeric `lines[]` (actual Slither output) and string `lines[]` (legacy format)
 - E2E harness uses global variables (not command substitution) for function return values to avoid stdout contamination from `log` calls
+- Phase 5: `AnalysisView` is the main client orchestrator — passes `activeAnalysis` as `{...raw, createdAt: raw.createdAt.toISOString()}` to avoid Date/string type mismatch
+- Phase 5: `FindingExplorer` sort uses `<`/`>` comparison (not `localeCompare`) for stable id ordering
+- Phase 5: `AnalysisControls` polling uses recursive `setTimeout` (not `setInterval`) to prevent overlapping requests
+- Phase 5: Terminal state triggers `router.refresh()` exactly once via `refreshCalledRef` guard
+- Phase 5: Polling failure shows "Polling interrupted" + Retry button after 3 consecutive failures
+- Phase 5: `AnalysisHistory` fetches pages via client-side API calls, not server re-renders
 - Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` (all on master)
