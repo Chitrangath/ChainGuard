@@ -229,11 +229,12 @@ export default async function ProjectPage({
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-6">
         <Link
           href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="inline-flex items-center gap-1.5 text-sm font-medium focus-ring"
+          style={{ color: "var(--text-secondary)" }}
         >
           &larr; Back to Dashboard
         </Link>

@@ -4,28 +4,64 @@ interface RiskScoreProps {
 }
 
 function getScoreColor(score: number): string {
-  if (score >= 80) return "text-green-600 dark:text-green-400";
-  if (score >= 60) return "text-yellow-600 dark:text-yellow-400";
-  if (score >= 40) return "text-orange-600 dark:text-orange-400";
-  return "text-red-600 dark:text-red-400";
+  if (score >= 80) return "var(--color-ready)";
+  if (score >= 60) return "var(--color-medium)";
+  if (score >= 40) return "var(--color-high)";
+  return "var(--color-critical)";
+}
+
+function getScoreLabel(score: number): string {
+  if (score >= 80) return "Low Risk";
+  if (score >= 60) return "Medium Risk";
+  if (score >= 40) return "High Risk";
+  return "Critical Risk";
 }
 
 export function RiskScore({ score, size = "lg" }: RiskScoreProps) {
   if (score === null) {
     return (
-      <div className="text-zinc-400 dark:text-zinc-500">
-        {size === "lg" ? "No score" : "—"}
+      <div className="text-center">
+        <div
+          className={size === "lg" ? "text-4xl" : "text-lg"}
+          style={{ color: "var(--text-muted)" }}
+        >
+          &mdash;
+        </div>
+        <div
+          className="mt-1 text-xs"
+          style={{ color: "var(--text-muted)" }}
+        >
+          No score
+        </div>
       </div>
     );
   }
 
-  const colorClass = getScoreColor(score);
-  const sizeClass = size === "lg" ? "text-4xl" : "text-lg";
+  const color = getScoreColor(score);
+  const label = getScoreLabel(score);
 
   return (
     <div className="text-center">
-      <div className={`${sizeClass} font-bold ${colorClass}`}>{score}</div>
-      <div className="text-xs text-zinc-500 dark:text-zinc-400">/100</div>
+      <div
+        className={`${size === "lg" ? "text-5xl" : "text-xl"} font-bold tracking-tight`}
+        style={{ color }}
+      >
+        {score}
+      </div>
+      <div
+        className={`${size === "lg" ? "text-sm" : "text-xs"} mt-0.5`}
+        style={{ color: "var(--text-muted)" }}
+      >
+        /100
+      </div>
+      {size === "lg" && (
+        <div
+          className="mt-1 text-xs font-medium"
+          style={{ color }}
+        >
+          {label}
+        </div>
+      )}
     </div>
   );
 }

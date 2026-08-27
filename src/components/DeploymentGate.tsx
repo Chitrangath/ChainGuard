@@ -1,3 +1,5 @@
+import { CheckIcon, XIcon } from "./icons";
+
 interface DeploymentGateProps {
   status: "READY" | "BLOCKED" | null;
 }
@@ -5,11 +7,20 @@ interface DeploymentGateProps {
 export function DeploymentGate({ status }: DeploymentGateProps) {
   if (status === null) {
     return (
-      <div className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-          DEPLOYMENT STATUS
+      <div
+        className="surface-card p-4 text-center"
+        style={{ borderColor: "var(--border-default)" }}
+      >
+        <div
+          className="text-xs font-medium uppercase tracking-wide"
+          style={{ color: "var(--text-muted)" }}
+        >
+          Deployment Status
         </div>
-        <div className="mt-1 text-sm text-zinc-400 dark:text-zinc-500">
+        <div
+          className="mt-2 text-sm"
+          style={{ color: "var(--text-muted)" }}
+        >
           No analysis completed
         </div>
       </div>
@@ -20,23 +31,40 @@ export function DeploymentGate({ status }: DeploymentGateProps) {
 
   return (
     <div
-      className={`rounded-lg border p-4 ${
-        isReady
-          ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950"
-          : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950"
-      }`}
+      className="rounded-lg border p-4 text-center"
+      style={{
+        background: isReady ? "var(--color-ready-bg)" : "var(--color-blocked-bg)",
+        borderColor: isReady ? "var(--color-ready-border)" : "var(--color-blocked-border)",
+      }}
     >
-      <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        DEPLOYMENT STATUS
-      </div>
       <div
-        className={`mt-1 text-lg font-bold ${
-          isReady
-            ? "text-green-700 dark:text-green-300"
-            : "text-red-700 dark:text-red-300"
-        }`}
+        className="text-xs font-medium uppercase tracking-wide"
+        style={{
+          color: isReady ? "var(--color-ready)" : "var(--color-blocked)",
+        }}
       >
-        {isReady ? "\u2713 READY" : "\u2717 BLOCKED"}
+        Deployment Status
+      </div>
+      <div className="mt-2 flex items-center justify-center gap-2">
+        {isReady ? (
+          <CheckIcon
+            className="h-5 w-5"
+            style={{ color: "var(--color-ready)" }}
+          />
+        ) : (
+          <XIcon
+            className="h-5 w-5"
+            style={{ color: "var(--color-blocked)" }}
+          />
+        )}
+        <span
+          className="text-lg font-bold"
+          style={{
+            color: isReady ? "var(--color-ready)" : "var(--color-blocked)",
+          }}
+        >
+          {status}
+        </span>
       </div>
     </div>
   );

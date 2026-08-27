@@ -1,6 +1,7 @@
 import { RiskScore } from "./RiskScore";
 import { DeploymentGate } from "./DeploymentGate";
 import { MetricsCard } from "./MetricsCard";
+import { AlertIcon } from "./icons";
 import { countBySeverity } from "@/lib/analysis-utils";
 import type { AnalysisData } from "@/lib/analysis-utils";
 
@@ -8,7 +9,10 @@ interface AnalysisSummaryProps {
   analysis: AnalysisData;
 }
 
-function formatDuration(startedAt: string | null, completedAt: string | null): string | null {
+function formatDuration(
+  startedAt: string | null,
+  completedAt: string | null,
+): string | null {
   if (!startedAt || !completedAt) return null;
   const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
   const seconds = Math.round(ms / 1000);
@@ -18,29 +22,62 @@ function formatDuration(startedAt: string | null, completedAt: string | null): s
   return remaining > 0 ? `${minutes}m ${remaining}s` : `${minutes}m`;
 }
 
+function formatTimestamp(isoStr: string): string {
+  const d = new Date(isoStr);
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
   const severityCounts = countBySeverity(analysis.findings);
   const totalFindings = analysis.findings.length;
   const duration = formatDuration(analysis.startedAt, analysis.completedAt);
-
-  const isTerminal = analysis.status === "COMPLETED" || analysis.status === "FAILED";
+  const isTerminal =
+    analysis.status === "COMPLETED" || analysis.status === "FAILED";
 
   return (
     <div className="mt-8 space-y-6">
+      {/* Failed Analysis Banner */}
       {analysis.status === "FAILED" && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-950">
-          <div className="text-xs font-medium text-red-600 dark:text-red-400">
-            ANALYSIS FAILED
+        <div
+          className="flex items-start gap-3 rounded-lg border p-4"
+          style={{
+            background: "var(--color-blocked-bg)",
+            borderColor: "var(--color-blocked-border)",
+          }}
+          role="alert"
+        >
+          <AlertIcon
+            className="mt-0.5 h-4 w-4 shrink-0"
+            style={{ color: "var(--color-blocked)" }}
+          />
+          <div>
+            <div
+              className="text-xs font-semibold uppercase tracking-wide"
+              style={{ color: "var(--color-blocked)" }}
+            >
+              Analysis Failed
+            </div>
+            <p
+              className="mt-1 text-sm"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              The analysis pipeline encountered an error. This is different from
+              a BLOCKED deployment status.
+            </p>
           </div>
-          <p className="mt-1 text-sm text-red-700 dark:text-red-300">
-            The analysis pipeline encountered an error. This is different from a BLOCKED deployment status.
-          </p>
         </div>
       )}
 
+      {/* Risk Score + Deployment Gate */}
       {isTerminal && (
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-1 flex items-center justify-center">
+          <div className="surface-card flex items-center justify-center p-6 lg:col-span-1">
             <RiskScore score={analysis.riskScore} />
           </div>
           <div className="lg:col-span-2">
@@ -51,11 +88,12 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
         </div>
       )}
 
+      {/* Metrics Grid */}
       {isTerminal && (
-        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-7">
           <MetricsCard
             label="Compilation"
-            value={analysis.compilationStatus ?? "—"}
+            value={analysis.compilationStatus ?? "\u2014"}
             status={
               analysis.compilationStatus === "PASS"
                 ? "pass"
@@ -69,7 +107,7 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
             value={
               analysis.totalTests !== null
                 ? `${analysis.passedTests ?? 0}/${analysis.totalTests}`
-                : "—"
+                : "\u2014"
             }
             status={
               analysis.testStatus === "PASS"
@@ -79,10 +117,7 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
                   : "neutral"
             }
           />
-          <MetricsCard
-            label="Findings"
-            value={totalFindings}
-          />
+          <MetricsCard label="Findings" value={totalFindings} />
           <MetricsCard
             label="Critical"
             value={severityCounts.CRITICAL}
@@ -106,22 +141,25 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
         </div>
       )}
 
+      {/* Timestamps */}
       {isTerminal && (
-        <div className="flex flex-wrap gap-4 text-xs text-zinc-500 dark:text-zinc-400">
-          <span>
-            Created {new Date(analysis.createdAt).toLocaleString()}
-          </span>
+        <div
+          className="flex flex-wrap gap-4 border-t pt-4 text-xs"
+          style={{
+            borderColor: "var(--border-default)",
+            color: "var(--text-muted)",
+          }}
+        >
+          <span>Created {formatTimestamp(analysis.createdAt)}</span>
           {analysis.startedAt && (
-            <span>
-              Started {new Date(analysis.startedAt).toLocaleString()}
-            </span>
+            <span>Started {formatTimestamp(analysis.startedAt)}</span>
           )}
           {analysis.completedAt && (
-            <span>
-              Completed {new Date(analysis.completedAt).toLocaleString()}
-            </span>
+            <span>Completed {formatTimestamp(analysis.completedAt)}</span>
           )}
-          {duration && <span>Duration: {duration}</span>}
+          {duration && (
+            <span className="font-medium">Duration: {duration}</span>
+          )}
         </div>
       )}
     </div>

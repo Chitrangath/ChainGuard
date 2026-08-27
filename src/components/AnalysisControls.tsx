@@ -202,7 +202,7 @@ export function AnalysisControls({
         onClick={handleRunAnalysis}
         disabled={loading || isActive}
         aria-busy={loading}
-        className="inline-flex items-center rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
+        className="btn btn-primary focus-ring"
       >
         {loading
           ? "Starting..."
@@ -213,38 +213,48 @@ export function AnalysisControls({
 
       {currentAnalysis && (
         <div className="text-right">
-          <span
-            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-              currentAnalysis.status === "QUEUED"
-                ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                : currentAnalysis.status === "RUNNING"
-                  ? "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-                  : currentAnalysis.status === "COMPLETED"
-                    ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                    : currentAnalysis.status === "FAILED"
-                      ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                      : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-200"
-            }`}
-          >
-            {currentAnalysis.status}
+          <span className={`badge ${
+            currentAnalysis.status === "QUEUED"
+              ? "badge-queued"
+              : currentAnalysis.status === "RUNNING"
+                ? "badge-running"
+                : currentAnalysis.status === "COMPLETED"
+                  ? "badge-ready"
+                  : "badge-blocked"
+          }`}>
+            {currentAnalysis.status === "QUEUED"
+              ? "Queued"
+              : currentAnalysis.status === "RUNNING"
+                ? "Running"
+                : currentAnalysis.status === "COMPLETED"
+                  ? "Completed"
+                  : "Failed"}
           </span>
         </div>
       )}
 
       {error && (
-        <p className="text-xs text-red-600 dark:text-red-400" role="alert">
+        <p
+          className="text-xs font-medium"
+          style={{ color: "var(--color-critical)" }}
+          role="alert"
+        >
           {error}
         </p>
       )}
 
       {pollError && (
         <div className="flex items-center gap-2" role="alert">
-          <p className="text-xs text-amber-600 dark:text-amber-400">
+          <p
+            className="text-xs"
+            style={{ color: "var(--color-medium)" }}
+          >
             Polling interrupted
           </p>
           <button
             onClick={handleRetry}
-            className="text-xs font-medium text-amber-700 underline hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100"
+            className="text-xs font-medium underline focus-ring"
+            style={{ color: "var(--color-medium)" }}
           >
             Retry
           </button>
@@ -252,7 +262,11 @@ export function AnalysisControls({
       )}
 
       {isActive && !pollError && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400" aria-live="polite">
+        <p
+          className="text-xs animate-pulse-subtle"
+          style={{ color: "var(--text-muted)" }}
+          aria-live="polite"
+        >
           Polling for updates...
         </p>
       )}

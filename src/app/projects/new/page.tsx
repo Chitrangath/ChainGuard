@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeftIcon } from "@/components/icons";
 
 export default function NewProjectPage() {
   const router = useRouter();
@@ -23,90 +24,126 @@ export default function NewProjectPage() {
       const res = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, repositoryUrl, description: description || undefined }),
+        body: JSON.stringify({
+          name,
+          repositoryUrl,
+          description: description || undefined,
+        }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        if (data.error) {
-          setServerError(data.error);
+        if (data.details) {
+          const fieldErrors: Record<string, string> = {};
+          for (const detail of data.details) {
+            if (detail.field && detail.message) {
+              fieldErrors[detail.field] = detail.message;
+            }
+          }
+          setErrors(fieldErrors);
         } else {
-          setServerError("Failed to create project");
+          setServerError(data.error || "Failed to create project");
         }
         return;
       }
 
       router.push(`/projects/${data.id}`);
     } catch {
-      setServerError("Network error. Please try again.");
+      setServerError("Network error. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-8">
-      <div className="mb-6">
-        <Link
-          href="/dashboard"
-          className="text-sm text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-        >
-          &larr; Back to Dashboard
-        </Link>
-      </div>
-      <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
+    <div className="mx-auto max-w-xl px-4 py-8 sm:px-6 lg:px-8">
+      <Link
+        href="/dashboard"
+        className="inline-flex items-center gap-1.5 text-sm font-medium focus-ring"
+        style={{ color: "var(--text-secondary)" }}
+      >
+        <ArrowLeftIcon className="h-4 w-4" />
+        Back to Dashboard
+      </Link>
+
+      <h1
+        className="mt-6 text-2xl font-bold tracking-tight"
+        style={{ color: "var(--text-primary)" }}
+      >
         New Project
       </h1>
-      <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-        Add a GitHub repository to analyze with ChainGuard.
+      <p
+        className="mt-1 text-sm"
+        style={{ color: "var(--text-secondary)" }}
+      >
+        Add a Solidity repository for security analysis.
       </p>
 
-      <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+      <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+        {/* Project Name */}
         <div>
           <label
             htmlFor="name"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            className="input-label"
           >
-            Project Name *
+            Project Name <span style={{ color: "var(--color-critical)" }}>*</span>
           </label>
           <input
             id="name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-            placeholder="e.g. DeFi Vault"
+            placeholder="e.g., DeFi Vault"
+            className="input focus-ring"
+            disabled={loading}
+            required
+            aria-describedby={errors.name ? "name-error" : undefined}
+            aria-invalid={!!errors.name}
           />
           {errors.name && (
-            <p className="mt-1 text-xs text-red-600">{errors.name}</p>
+            <p id="name-error" className="input-error" role="alert">
+              {errors.name}
+            </p>
           )}
         </div>
 
+        {/* Repository URL */}
         <div>
           <label
             htmlFor="repositoryUrl"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            className="input-label"
           >
-            GitHub Repository URL *
+            GitHub Repository URL <span style={{ color: "var(--color-critical)" }}>*</span>
           </label>
           <input
             id="repositoryUrl"
             type="url"
             value={repositoryUrl}
             onChange={(e) => setRepositoryUrl(e.target.value)}
-            className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-            placeholder="https://github.com/owner/repo"
+            placeholder="https://github.com/org/repo"
+            className="input focus-ring"
+            disabled={loading}
+            required
+            aria-describedby={errors.repositoryUrl ? "url-error" : "url-help"}
+            aria-invalid={!!errors.repositoryUrl}
           />
-          {errors.repositoryUrl && (
-            <p className="mt-1 text-xs text-red-600">{errors.repositoryUrl}</p>
+          {errors.repositoryUrl ? (
+            <p id="url-error" className="input-error" role="alert">
+              {errors.repositoryUrl}
+            </p>
+          ) : (
+            <p id="url-help" className="input-description">
+              Must be a public GitHub repository URL containing a Foundry project.
+            </p>
           )}
         </div>
 
+        {/* Description */}
         <div>
           <label
             htmlFor="description"
-            className="block text-sm font-medium text-zinc-700 dark:text-zinc-300"
+            className="input-label"
           >
             Description
           </label>
@@ -114,25 +151,57 @@ export default function NewProjectPage() {
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional description of the project"
             rows={3}
-            className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
-            placeholder="Optional description"
+            className="input focus-ring resize-y"
+            disabled={loading}
+            aria-describedby={errors.description ? "desc-error" : undefined}
+            aria-invalid={!!errors.description}
           />
+          {errors.description && (
+            <p id="desc-error" className="input-error" role="alert">
+              {errors.description}
+            </p>
+          )}
         </div>
 
+        {/* Server Error */}
         {serverError && (
-          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-300">
+          <div
+            className="rounded-lg border p-4 text-sm"
+            role="alert"
+            style={{
+              background: "var(--color-blocked-bg)",
+              borderColor: "var(--color-blocked-border)",
+              color: "var(--color-blocked)",
+            }}
+          >
             {serverError}
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-zinc-900 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-700 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
-        >
-          {loading ? "Creating..." : "Create Project"}
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            type="submit"
+            disabled={loading}
+            className="btn btn-primary focus-ring"
+          >
+            {loading ? (
+              <>
+                <span className="animate-pulse-subtle">Creating...</span>
+              </>
+            ) : (
+              "Create Project"
+            )}
+          </button>
+          <Link
+            href="/dashboard"
+            className="btn btn-secondary focus-ring"
+          >
+            Cancel
+          </Link>
+        </div>
       </form>
     </div>
   );

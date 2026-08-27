@@ -1,7 +1,7 @@
 # Project Snapshot: ChainGuard
 
 *Generated on: 2026-08-27*
-*Snapshot Version: 5.0*
+*Snapshot Version: 6.0*
 
 ## 1. Context State & Goals
 
@@ -11,11 +11,11 @@ ChainGuard is a full-stack Smart Contract DevSecOps platform. It allows a develo
 
 ### Current Status
 
-Phase 6 COMPLETE — Redis caching, Docker Compose infrastructure, and GitHub Actions CI. 113 tests pass, typecheck clean, production build succeeds.
+Phase 6.5 COMPLETE — Production-grade UI/UX polish. Security-operations aesthetic with consistent design system, professional iconography, accessible components, and responsive layouts. 123 tests pass, lint clean, typecheck clean, production build succeeds.
 
 ### Current Objective
 
-Phase 6 is fully done with code review fixes applied. Next: Phase 7 (Production deployment, authentication, RBAC).
+Phase 6.5 is fully done. Next: Phase 7 (README, architecture diagram, production deployment).
 
 ---
 
@@ -58,6 +58,55 @@ Dashboard:
   Terminal state: router.refresh() re-fetches server data exactly once
 ```
 
+### Design System
+
+Phase 6.5 established a consistent design system using CSS custom properties in `globals.css`:
+
+**Surfaces:**
+- `--background`: Page background (light: #f8fafc, dark: #0c0f14)
+- `--surface-primary`: Card backgrounds
+- `--surface-secondary`: Secondary surfaces, expanded finding details
+- `--surface-elevated`: Elevated cards with shadow
+- `--surface-nav`: Navigation bar
+
+**Borders:**
+- `--border-default`: Standard borders
+- `--border-emphasized`: Stronger borders
+- `--border-focus`: Focus ring color (blue)
+
+**Text:**
+- `--text-primary`: Headings, primary content
+- `--text-secondary`: Descriptions, secondary info
+- `--text-muted`: Timestamps, labels, metadata
+
+**Status Colors (Security):**
+- `--color-critical`: Red for CRITICAL findings, FAILED, BLOCKED
+- `--color-high`: Orange for HIGH findings
+- `--color-medium`: Yellow/amber for MEDIUM findings, QUEUED
+- `--color-low`: Blue for LOW findings, RUNNING
+
+**Status Colors (Operational):**
+- `--color-ready`: Green for READY, PASS, COMPLETED
+- `--color-blocked`: Red for BLOCKED, FAILED
+- `--color-queued`: Yellow for QUEUED
+- `--color-running`: Blue for RUNNING
+
+**Shared Components:**
+- `surface-card`, `surface-elevated`: Card surface patterns
+- `btn`, `btn-primary`, `btn-secondary`, `btn-ghost`, `btn-danger`: Button variants
+- `badge`, `badge-critical/high/medium/low/ready/blocked/queued/running`: Status badges
+- `input`, `input-label`, `input-description`, `input-error`: Form controls
+- `focus-ring`: Accessible focus indicator
+- `animate-pulse-subtle`: Subtle loading animation
+
+**Icons (src/components/icons.tsx):**
+- ShieldIcon, ChevronIcon, ExternalLinkIcon, CheckIcon, XIcon, AlertIcon, SearchIcon, ArrowLeftIcon, PlusIcon, HistoryIcon
+
+**Reusable Components:**
+- `StatusBadge`: Status display (QUEUED/RUNNING/COMPLETED/FAILED/READY/BLOCKED/PASS/FAIL)
+- `SeverityBadge`: Severity display with optional count (CRITICAL/HIGH/MEDIUM/LOW)
+- `DeploymentBadge`: Deployment status display (READY/BLOCKED)
+
 ### Repository Structure
 
 ```
@@ -71,55 +120,61 @@ chainguard/
 │   │   │   ├── projects/[id]/analyses/route.ts (GET paginated history)
 │   │   │   ├── projects/[id]/analyses/[analysisId]/route.ts (GET selected analysis + findings)
 │   │   │   └── analyses/[id]/route.ts     (GET analysis status — compact)
-│   │   ├── dashboard/page.tsx             (server: error states, active status)
+│   │   ├── dashboard/page.tsx             (server: summary metrics, project grid)
 │   │   ├── projects/[id]/page.tsx         (server: bounded queries, search param selection)
-│   │   └── projects/new/page.tsx
+│   │   └── projects/new/page.tsx          (client: form with validation)
 │   ├── components/
-│   │   ├── AnalysisControls.tsx   (rewritten: setTimeout polling, AbortController, retry, aria-live)
-│   │   ├── AnalysisHistory.tsx    (NEW: paginated selectable history)
-│   │   ├── AnalysisSummary.tsx    (NEW: risk + metrics + deployment gate + timestamps)
-│   │   ├── AnalysisView.tsx       (NEW: orchestrator component)
-│   │   ├── DeploymentGate.tsx
-│   │   ├── FindingExplorer.tsx    (NEW: severity filter + expandable rows)
-│   │   ├── FindingTable.tsx       (legacy, no longer imported)
-│   │   ├── MetricsCard.tsx        (updated: severity accent borders)
-│   │   ├── Navbar.tsx
-│   │   ├── ProjectCard.tsx        (updated: last analysis date, active status)
-│   │   └── RiskScore.tsx
+│   │   ├── AnalysisControls.tsx   (client: polling, retry, status badge)
+│   │   ├── AnalysisHistory.tsx    (client: paginated selectable history)
+│   │   ├── AnalysisSummary.tsx    (server: risk + metrics + deployment gate + timestamps)
+│   │   ├── AnalysisView.tsx       (client: orchestrator component)
+│   │   ├── Badge.tsx              (NEW: StatusBadge, SeverityBadge, DeploymentBadge)
+│   │   ├── DeploymentGate.tsx     (server: deployment status display)
+│   │   ├── FindingExplorer.tsx    (client: severity filter + expandable rows)
+│   │   ├── MetricsCard.tsx        (server: metric display with accent borders)
+│   │   ├── Navbar.tsx             (client: shield icon, active states)
+│   │   ├── ProjectCard.tsx        (server: project summary card)
+│   │   ├── RiskScore.tsx          (server: risk score display with color coding)
+│   │   └── icons.tsx              (NEW: SVG icon library)
 │   ├── lib/
+│   │   ├── analysis-cache.ts      (cache abstraction)
+│   │   ├── analysis-service.ts    (cache-aside pattern)
+│   │   ├── analysis-utils.ts      (shared types and utilities)
 │   │   ├── api-error.ts
 │   │   ├── db.ts                  (Prisma client singleton)
-│   │   ├── validation.ts          (Zod schemas: pagination, analysis filter, finding filter)
-│   │   ├── risk-engine.ts         (risk scoring: 100 - deductions)
-│   │   └── analysis-parser.ts     (Slither JSON parser, handles numeric lines)
+│   │   ├── redis.ts               (Redis client)
+│   │   ├── risk-engine.ts         (risk scoring)
+│   │   ├── analysis-parser.ts     (Slither parser)
+│   │   └── validation.ts          (Zod schemas)
 │   ├── __tests__/
-│   │   └── api-analyses.test.ts   (NEW: pagination, filtering, sort, severity count tests)
+│   │   ├── api-analyses.test.ts
+│   │   └── api-error.test.ts
 │   └── generated/prisma/          (auto-generated Prisma client)
 ├── worker/
 │   ├── index.ts                   (main loop: polling, job claiming)
-│   ├── analyzer.ts                (Docker execution, SVM setup, outputDir fix)
+│   ├── analyzer.ts                (Docker execution)
 │   ├── db.ts                      (worker Prisma client)
 │   └── __tests__/
-│       ├── analyzer.test.ts       (URL validation + parseTestOutput tests)
-│       ├── analysis-parser.test.ts (Slither parser tests)
+│       ├── analyzer.test.ts
+│       ├── analysis-parser.test.ts
 │       ├── state-transitions.test.ts
-│       └── risk-engine.test.ts    (risk engine tests)
+│       └── risk-engine.test.ts
 ├── docker/
 │   └── analyzer/
-│       ├── Dockerfile             (forge v1.7.1 + solc 0.8.20 + slither v0.11.6)
-│       └── README.md
+│       └── Dockerfile             (forge + slither + solc)
 ├── scripts/
-│   ├── setup-test-repo.sh         (init bare git repo for test-project)
-│   └── e2e-test.sh                (production-path E2E test harness)
+│   ├── setup-test-repo.sh
+│   └── e2e-test.sh
 ├── test-project/
-│   ├── foundry.toml               (solc_version = "0.8.20", remappings for helpers/)
-│   ├── src/Vault.sol              (reentrancy vulnerability fixture)
-│   ├── test/
-│   │   ├── Vault.t.sol            (Foundry test using local Test helper)
-│   │   └── helpers/Test.sol       (minimal forge-std replacement)
-│   └── README.md
+│   ├── foundry.toml
+│   ├── src/Vault.sol
+│   └── test/
 ├── prisma/schema.prisma
-├── docs/Chain_guard_PRD_MVP.md
+├── docker-compose.yml
+├── .github/workflows/ci.yml
+├── .dockerignore
+├── .env.example
+├── Dockerfile
 ├── package.json
 └── vitest.config.ts
 ```
@@ -134,7 +189,7 @@ chainguard/
 - Prisma v7 requires driver adapter (`@prisma/adapter-pg` + `pg`)
 - Zod v4 for validation
 - 120s timeout for tool execution, 300s overall timeout
-- `dockerRun()` accepts optional `outputDir` parameter — Slither invocation passes `wsDir/output` to fix path mismatch
+- `dockerRun()` accepts optional `outputDir` parameter
 
 ---
 
@@ -142,47 +197,38 @@ chainguard/
 
 ### Completed (committed)
 
-- Phase 1 (commit `6ec16d6`): Next.js skeleton, Prisma schema, pages, components, Tailwind, ESLint, TypeScript, production build
-- Phase 2 (commit `770d522`): Project CRUD API, Dashboard, Project detail page, Create Project form, 17 tests
-- Phase 3 (commit `bbf46eb`/`1cd7547`): POST analyze endpoint, GET analysis status, worker with atomic job claiming, 3s polling, stale job detection, AnalysisControls with polling, 28 tests total
-- Phase 4 (commit `9e01e58`): Risk engine, Slither parser, Docker analyzer execution, test-project, 44 tests total
-- Phase 4 Docker fix (commit `efa05c9`): Pinned Foundry v1.7.1, fixed pip install, verified image
-- Phase 4 self-contained fixture (commit `aba8166`): Replaced forge-std with minimal local Test helper, test-project builds/tests without network
-- Phase 4 E2E fix (commit `a4edb24`): Fixed dockerRun outputDir path mismatch, fixed Slither parser numeric lines, fixed forge test regex, added E2E test harness with process ownership
-- Phase 5 (commits `51f853b` + `2092263`): Complete security analysis dashboard — paginated history, expandable findings, severity filtering, automatic refresh, 98 tests, shared utility types
-- Phase 6 (pending commit): Redis caching, Docker Compose, GitHub Actions CI, 113 tests
+- Phase 1 (commit `6ec16d6`): Next.js skeleton, Prisma schema, pages, components, Tailwind
+- Phase 2 (commit `770d522`): Project CRUD API, Dashboard, Project detail, Create form
+- Phase 3 (commits `bbf46eb`/`1cd7547`): POST analyze endpoint, worker with atomic job claiming, AnalysisControls polling
+- Phase 4 (commit `9e01e58`): Risk engine, Slither parser, Docker analyzer execution, test-project
+- Phase 4 fixes (commits `efa05c9`, `aba8166`, `a4edb24`): Docker pinning, self-contained fixture, E2E fix
+- Phase 5 (commits `51f853b` + `2092263`): Complete security analysis dashboard + code review fixes
+- Phase 6 (commit `c509dff`): Redis client, cache abstraction, analysis service, Dockerfile, Docker Compose, GitHub Actions CI
+- Phase 6 fixes (commit `0db3ff9`): Redis timeout reduction, .dockerignore, health check, CI fix
+- Phase 6.5: Production-grade UI/UX polish with design system, professional iconography, accessible components
 
-### In Progress (NOT committed)
+### In Progress
 
-Phase 6 — Redis caching, Docker Compose, GitHub Actions CI.
+(None — Phase 6.5 is complete)
 
-### Planned (next steps)
+### Planned
 
 - Phase 7: README, architecture diagram, production deployment
 - Phase 8: Authentication, RBAC, multi-chain support
 
 ### Known Technical Debt / Bugs
 
-- FindingTable.tsx is legacy (no longer imported), can be removed
-- Analyzer test times out in CI (Docker dependency)
+(None critical)
 
 ### Important Decisions
 
-- Docker base image: `node:20-bookworm-slim` (has bash, apt, Node.js)
-- Foundry in Docker: Download tarballs from GitHub releases pinned to v1.7.1
-- Slither in Docker: pip install with `--break-system-packages` on Debian bookworm
-- solc 0.8.20: Pre-downloaded to `/usr/local/lib/solc-0.8.20` in Docker image; forge uses `--use` flag to bypass SVM
-- Slither solc-select: Pre-cached in Docker image at `/root/.solc-select/`; at runtime copied to `$HOME/.solc-select/` and SVM populated at `$HOME/.svm/0.8.20/`
-- Risk engine: Start at 100, CRITICAL=-30, HIGH=-15, MEDIUM=-7, LOW=-2, compilation FAIL=-20, test FAIL=-10
-- Deployment gate: READY if score>=80 AND 0 criticals AND compile=PASS AND tests=PASS
-- forge-std replaced with minimal local Test helper to keep test-project self-contained (no network, no `forge install`)
-- test-project/foundry.toml has `remappings = ["helpers/=test/helpers/"]` for the local Test helper
-- Phase 5: Analysis selection uses `?analysisId=` search param — server re-renders with selected analysis findings
-- Phase 5: Polling uses recursive setTimeout with AbortController (no overlapping requests)
-- Phase 5: Terminal state triggers exactly one `router.refresh()` via Next.js 16 `useRouter()` from `next/navigation`
-- Phase 5: History is bounded (10 items per page, max pageSize 25) via Zod-validated pagination
-- Phase 5: Findings sorted by severity (CRITICAL→LOW), then file ASC, line ASC, id ASC
-- Phase 5: Analysis numbering uses shortened ID (not sequential #N) to avoid inaccurate counts across pagination
+- Design system uses CSS custom properties in globals.css for consistent theming
+- All icons are SVG components in `src/components/icons.tsx` (no external icon library)
+- Badge components (`StatusBadge`, `SeverityBadge`, `DeploymentBadge`) provide consistent status display
+- Focus ring pattern (`focus-ring` class) ensures keyboard accessibility
+- `prefers-reduced-motion` respected via CSS media query
+- Dark mode via CSS custom properties (not Tailwind `dark:` prefix)
+- FindingTable.tsx removed as dead code (was not imported anywhere)
 
 ---
 
@@ -207,48 +253,6 @@ export function calculateRisk(input: RiskInput): RiskResult {
   // score = 100 - 30*CRITICAL - 15*HIGH - 7*MEDIUM - 2*LOW - 20*compFail - 10*testFail
   // READY iff score>=80 AND 0 criticals AND compile=PASS AND tests=PASS
 }
-```
-
-### Slither Parser
-
-```typescript
-export function parseSlitherOutput(rawJson: string): ParsedFinding[] {
-  // ParsedFinding: { severity, type, contract, file, line, description, source }
-  // Handles both numeric lines[] (real Slither output) and string lines[] (legacy)
-}
-```
-
-### Test Output Parser
-
-```typescript
-export function parseTestOutput(testOutput: string): {
-  passedTests: number | null;
-  failedTests: number | null;
-  totalTests: number | null;
-};
-// Matches: "3 passed", "3 tests passed", "1 failed", "1 test failed"
-```
-
-### Docker Analyzer
-
-```
-docker run --rm --network none --read-only --cap-drop=ALL \
-  --security-opt=no-new-privileges --memory=2g --cpus=2 --pids-limit=512 \
-  --user uid:gid --workdir /project \
-  --tmpfs /tmp:rw,nosuid,nodev,exec,size=256m --env HOME=/tmp \
-  -v <foundryDir>:/project \
-  -v <outputDir>:/tmp/output:rw \
-  chainguard-analyzer:latest <command>
-```
-
-### Slither Invocation (inside container)
-
-```sh
-mkdir -p "$HOME/.svm/0.8.20" && \
-cp /usr/local/lib/solc-0.8.20 "$HOME/.svm/0.8.20/solc-0.8.20" && \
-chmod +x "$HOME/.svm/0.8.20/solc-0.8.20" && \
-cp -r /root/.solc-select "$HOME/.solc-select" 2>/dev/null || true && \
-slither . --json /tmp/output/slither.json --fail-high
 ```
 
 ### E2E Test Results (verified)
@@ -298,7 +302,7 @@ npm run dev          # Next.js dev server
 npm run worker       # Start worker (tsx worker/index.ts)
 
 # Test
-npm test             # vitest run (98 tests)
+npm test             # vitest run (123 tests)
 npm run lint         # eslint
 npm run typecheck    # tsc --noEmit
 npm run build        # next build (production)
@@ -314,8 +318,8 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 
 ## 6. Precise Next Steps
 
-1. **Phase 6** — Redis caching, Docker Compose, CI pipeline
-2. **Phase 7** — README, architecture diagram, production deployment
+1. **Phase 7** — README, architecture diagram, production deployment
+2. **Phase 8** — Authentication, RBAC, multi-chain support
 
 ---
 
@@ -338,18 +342,14 @@ E2E_TEST_REPO_URL="https://github.com/Chitrangath/ChainGuard" bash scripts/e2e-t
 - Phase 5: Terminal state triggers `router.refresh()` exactly once via `refreshCalledRef` guard
 - Phase 5: Polling failure shows "Polling interrupted" + Retry button after 3 consecutive failures
 - Phase 5: `AnalysisHistory` fetches pages via client-side API calls, not server re-renders
-- Phase 5 review: `countBySeverity` extracted to `src/lib/analysis-utils.ts` — shared by AnalysisSummary and FindingExplorer
-- Phase 5 review: `AnalysisData`, `AnalysisSummaryData`, `FindingData` types extracted to `src/lib/analysis-utils.ts` — used by AnalysisView, AnalysisSummary, AnalysisHistory, FindingExplorer
-- Phase 5 review: `pollOnce` uses functional update (`setCurrentAnalysis(prev => ...)`) — no dependency on `currentAnalysis?.createdAt`
-- Phase 5 review: `router.refresh()` extracted to `triggerRefreshOnce` — called after state update, not inside updater
-- Phase 5 review: Unused `paginationSchema` removed from `validation.ts` — pagination tests now use `analysisHistoryFilterSchema`
-- Phase 5 review: MetricsCard accent type extended with `"blue"` — used by Low severity card
-- Phase 5 review: Missing Low severity card added to AnalysisSummary
-- Phase 6: Redis client (`src/lib/redis.ts`) — lazy singleton, bounded connection timeout (3s), optional (no REDIS_URL = no Redis)
-- Phase 6: Cache abstraction (`src/lib/analysis-cache.ts`) — key format `analysis:{id}`, TTL 300s, versioned envelope, malformed = miss + best-effort delete
+- Phase 6: Redis client (`src/lib/redis.ts`) — lazy singleton, 500ms connection timeout, optional (no REDIS_URL = no Redis)
+- Phase 6: Cache abstraction (`src/lib/analysis-cache.ts`) — key format `analysis:{id}`, TTL 300s, versioned envelope
 - Phase 6: Analysis service (`src/lib/analysis-service.ts`) — cache-aside pattern, both GET endpoints use cache for terminal analyses
-- Phase 6: Docker Compose — postgres (port 5433 default), redis, app services; worker runs on host (no Docker socket mount)
+- Phase 6: Docker Compose — postgres (port 5433 default), redis, app services with health checks; worker runs on host
 - Phase 6: GitHub Actions CI — quality job (lint, typecheck, test, build) + infra job (postgres, redis, analyzer image)
 - Phase 6: `next.config.ts` has `output: "standalone"` for Docker production builds
-- Phase 6: ESLint ignores `.opencode/**`, `.agents/**`, `.claude/**`, `scripts/**`, `docker/**`, `worker/**` (non-application code)
-- Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` -> `51f853b` (all on master)
+- Phase 6.5: Design system uses CSS custom properties — all colors defined in `globals.css` with dark mode via `@media (prefers-color-scheme: dark)`
+- Phase 6.5: Icons are all SVG components in `src/components/icons.tsx` — no external icon library
+- Phase 6.5: Badge components (`StatusBadge`, `SeverityBadge`, `DeploymentBadge`) provide consistent status display
+- Phase 6.5: `FindingTable.tsx` was removed as dead code (was not imported anywhere)
+- Git commits: `6ec16d6` -> `770d522` -> `bbf46eb` -> `1cd7547` -> `9e01e58` -> `efa05c9` -> `aba8166` -> `a4edb24` -> `51f853b` -> `2092263` -> `c509dff` -> `0db3ff9` (all on master)

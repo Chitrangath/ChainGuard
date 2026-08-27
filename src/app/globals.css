@@ -1,26 +1,381 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════════════
+   ChainGuard Design System — Security Operations Aesthetic
+   ═══════════════════════════════════════════════════════════════ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Surfaces */
+  --background: #f8fafc;
+  --surface-primary: #ffffff;
+  --surface-secondary: #f1f5f9;
+  --surface-elevated: #ffffff;
+  --surface-nav: #ffffff;
+
+  /* Borders */
+  --border-default: #e2e8f0;
+  --border-emphasized: #cbd5e1;
+  --border-focus: #3b82f6;
+
+  /* Text */
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --text-inverse: #ffffff;
+
+  /* Status: Security */
+  --color-critical: #dc2626;
+  --color-critical-bg: #fef2f2;
+  --color-critical-border: #fecaca;
+
+  --color-high: #ea580c;
+  --color-high-bg: #fff7ed;
+  --color-high-border: #fed7aa;
+
+  --color-medium: #d97706;
+  --color-medium-bg: #fffbeb;
+  --color-medium-border: #fde68a;
+
+  --color-low: #2563eb;
+  --color-low-bg: #eff6ff;
+  --color-low-border: #bfdbfe;
+
+  /* Status: Operational */
+  --color-ready: #16a34a;
+  --color-ready-bg: #f0fdf4;
+  --color-ready-border: #bbf7d0;
+
+  --color-blocked: #dc2626;
+  --color-blocked-bg: #fef2f2;
+  --color-blocked-border: #fecaca;
+
+  --color-queued: #d97706;
+  --color-queued-bg: #fffbeb;
+  --color-queued-border: #fde68a;
+
+  --color-running: #2563eb;
+  --color-running-bg: #eff6ff;
+  --color-running-border: #bfdbfe;
+
+  /* Action */
+  --color-action-primary: #0f172a;
+  --color-action-primary-hover: #1e293b;
+  --color-action-secondary: #f1f5f9;
+  --color-action-secondary-hover: #e2e8f0;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/* Dark mode overrides */
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --background: #0c0f14;
+    --surface-primary: #141820;
+    --surface-secondary: #1a1f2b;
+    --surface-elevated: #1e2330;
+    --surface-nav: #111520;
+
+    --border-default: #252b3a;
+    --border-emphasized: #333a4d;
+    --border-focus: #3b82f6;
+
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --text-inverse: #0f172a;
+
+    --color-critical-bg: #2a1215;
+    --color-critical-border: #5c1d1d;
+
+    --color-high-bg: #2a1a0f;
+    --color-high-border: #5c3a1d;
+
+    --color-medium-bg: #2a2010;
+    --color-medium-border: #5c4a1d;
+
+    --color-low-bg: #0f1a2a;
+    --color-low-border: #1d3a5c;
+
+    --color-ready-bg: #0a1f12;
+    --color-ready-border: #1d5c30;
+
+    --color-blocked-bg: #2a1215;
+    --color-blocked-border: #5c1d1d;
+
+    --color-queued-bg: #2a2010;
+    --color-queued-border: #5c4a1d;
+
+    --color-running-bg: #0f1a2a;
+    --color-running-border: #1d3a5c;
+
+    --color-action-primary: #f1f5f9;
+    --color-action-primary-hover: #e2e8f0;
+    --color-action-secondary: #1e2330;
+    --color-action-secondary-hover: #252b3a;
   }
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Base Styles
+   ═══════════════════════════════════════════════════════════════ */
+
 body {
   background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus ring utility */
+.focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+.focus-ring:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Shared Component Styles
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Surfaces */
+.surface-card {
+  background: var(--surface-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 0.5rem;
+}
+
+.surface-elevated {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: 0.5rem;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  padding: 0.5rem 1rem;
+  transition: all 0.15s ease;
+  cursor: pointer;
+  white-space: nowrap;
+  min-height: 2.5rem;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+
+.btn-primary {
+  background: var(--color-action-primary);
+  color: var(--text-inverse);
+  border: 1px solid transparent;
+}
+.btn-primary:hover {
+  background: var(--color-action-primary-hover);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: var(--color-action-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-default);
+}
+.btn-secondary:hover {
+  background: var(--color-action-secondary-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid transparent;
+}
+.btn-ghost:hover {
+  background: var(--color-action-secondary);
+  color: var(--text-primary);
+}
+
+.btn-danger {
+  background: var(--color-blocked);
+  color: #ffffff;
+  border: 1px solid transparent;
+}
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.btn-sm {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.8125rem;
+  min-height: 2rem;
+}
+
+.btn-lg {
+  padding: 0.625rem 1.25rem;
+  font-size: 0.9375rem;
+  min-height: 2.75rem;
+}
+
+/* Badges */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.125rem 0.625rem;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.badge-critical {
+  background: var(--color-critical-bg);
+  color: var(--color-critical);
+  border: 1px solid var(--color-critical-border);
+}
+.badge-high {
+  background: var(--color-high-bg);
+  color: var(--color-high);
+  border: 1px solid var(--color-high-border);
+}
+.badge-medium {
+  background: var(--color-medium-bg);
+  color: var(--color-medium);
+  border: 1px solid var(--color-medium-border);
+}
+.badge-low {
+  background: var(--color-low-bg);
+  color: var(--color-low);
+  border: 1px solid var(--color-low-border);
+}
+
+.badge-ready {
+  background: var(--color-ready-bg);
+  color: var(--color-ready);
+  border: 1px solid var(--color-ready-border);
+}
+.badge-blocked {
+  background: var(--color-blocked-bg);
+  color: var(--color-blocked);
+  border: 1px solid var(--color-blocked-border);
+}
+.badge-queued {
+  background: var(--color-queued-bg);
+  color: var(--color-queued);
+  border: 1px solid var(--color-queued-border);
+}
+.badge-running {
+  background: var(--color-running-bg);
+  color: var(--color-running);
+  border: 1px solid var(--color-running-border);
+}
+
+/* Form inputs */
+.input {
+  display: block;
+  width: 100%;
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-default);
+  background: var(--surface-primary);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  min-height: 2.5rem;
+}
+.input::placeholder {
+  color: var(--text-muted);
+}
+.input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input-label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 0.375rem;
+}
+
+.input-description {
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+.input-error {
+  font-size: 0.8125rem;
+  color: var(--color-critical);
+  margin-top: 0.25rem;
+}
+
+/* Divider */
+.divider {
+  border: 0;
+  border-top: 1px solid var(--border-default);
+  margin: 1.5rem 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Animations (respect prefers-reduced-motion)
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s ease-in-out infinite;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Scrollbar (subtle)
+   ═══════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-emphasized);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }

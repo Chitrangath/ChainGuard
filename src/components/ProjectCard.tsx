@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { ExternalLinkIcon } from "./icons";
+import { StatusBadge, DeploymentBadge } from "./Badge";
 
 interface ProjectCardProps {
   id: string;
@@ -12,6 +14,30 @@ interface ProjectCardProps {
   createdAt: string;
 }
 
+function getRiskColor(score: number): string {
+  if (score >= 80) return "var(--color-ready)";
+  if (score >= 60) return "var(--color-medium)";
+  if (score >= 40) return "var(--color-high)";
+  return "var(--color-critical)";
+}
+
+function formatRelativeDate(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffDays < 30) return `${Math.floor(diffDays / 7)} weeks ago`;
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
 export function ProjectCard({
   id,
   name,
@@ -23,71 +49,104 @@ export function ProjectCard({
   activeStatus,
   createdAt,
 }: ProjectCardProps) {
+  const repoDisplay = repositoryUrl.replace(
+    /^https:\/\/github\.com\//,
+    "",
+  );
+
   return (
-    <div className="rounded-lg border border-zinc-200 bg-white p-4 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700">
-      <div className="flex items-start justify-between">
-        <div className="space-y-1 min-w-0 flex-1">
-          <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
+    <Link
+      href={`/projects/${id}`}
+      className="surface-card block p-4 transition-all hover:shadow-md focus-ring group"
+      style={{
+        borderColor: "var(--border-default)",
+      }}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <h3
+            className="truncate text-sm font-semibold group-hover:underline"
+            style={{ color: "var(--text-primary)" }}
+          >
             {name}
           </h3>
-          <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-xs">
-            {repositoryUrl}
-          </p>
+          <div
+            className="mt-0.5 flex items-center gap-1 text-xs"
+            style={{ color: "var(--text-muted)" }}
+          >
+            <span className="truncate">{repoDisplay}</span>
+            <ExternalLinkIcon className="h-3 w-3 shrink-0 opacity-50" />
+          </div>
           {description && (
-            <p className="text-sm text-zinc-600 dark:text-zinc-300 line-clamp-2">{description}</p>
+            <p
+              className="mt-1.5 line-clamp-2 text-xs leading-relaxed"
+              style={{ color: "var(--text-secondary)" }}
+            >
+              {description}
+            </p>
           )}
         </div>
-        <div className="text-right ml-3 shrink-0">
+
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
           {latestRiskScore !== null && latestRiskScore !== undefined ? (
-            <div className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-              {latestRiskScore}
-              <span className="text-xs font-normal text-zinc-500">/100</span>
+            <div className="text-right">
+              <div
+                className="text-xl font-bold"
+                style={{ color: getRiskColor(latestRiskScore) }}
+              >
+                {latestRiskScore}
+              </div>
+              <div
+                className="text-[10px] font-medium uppercase tracking-wide"
+                style={{ color: "var(--text-muted)" }}
+              >
+                /100
+              </div>
             </div>
           ) : (
-            <div className="text-sm text-zinc-400">No analysis</div>
+            <div
+              className="text-xs"
+              style={{ color: "var(--text-muted)" }}
+            >
+              No analysis
+            </div>
           )}
           {latestDeploymentStatus && (
-            <span
-              className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                latestDeploymentStatus === "READY"
-                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                  : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-              }`}
-            >
-              {latestDeploymentStatus}
-            </span>
+            <DeploymentBadge status={latestDeploymentStatus} />
           )}
         </div>
       </div>
-      <div className="mt-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+
+      <div
+        className="mt-3 flex items-center justify-between border-t pt-3"
+        style={{ borderColor: "var(--border-default)" }}
+      >
+        <div>
           {activeStatus ? (
-            <span
-              className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-                activeStatus === "QUEUED"
-                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                  : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
-              }`}
-            >
-              {activeStatus === "QUEUED" ? "Queued" : "Analyzing"}
-            </span>
+            <StatusBadge status={activeStatus} />
           ) : lastAnalysisDate ? (
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">
-              Last analysis {new Date(lastAnalysisDate).toLocaleDateString()}
+            <span
+              className="text-xs"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Analyzed {formatRelativeDate(lastAnalysisDate)}
             </span>
           ) : (
-            <span className="text-xs text-zinc-400 dark:text-zinc-500">
-              Created {new Date(createdAt).toLocaleDateString()}
+            <span
+              className="text-xs"
+              style={{ color: "var(--text-muted)" }}
+            >
+              Created {formatRelativeDate(createdAt)}
             </span>
           )}
         </div>
-        <Link
-          href={`/projects/${id}`}
-          className="text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+        <span
+          className="text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100"
+          style={{ color: "var(--text-secondary)" }}
         >
-          View
-        </Link>
+          View &rarr;
+        </span>
       </div>
-    </div>
+    </Link>
   );
 }
