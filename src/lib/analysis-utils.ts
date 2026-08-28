@@ -30,6 +30,14 @@ export interface AnalysisData {
   completedAt: string | null;
   createdAt: string;
   findings: FindingData[];
+  projectType: string | null;
+  compilerVersion: string | null;
+  contractsDiscovered: number | null;
+  contractsCompiled: number | null;
+  contractsTargetedForScan: number | null;
+  securityAnalysisStatus: string | null;
+  gateReasons: string[];
+  coverage: string | null;
 }
 
 export interface AnalysisSummaryData {
@@ -46,6 +54,13 @@ export interface AnalysisSummaryData {
   completedAt: string | null;
   createdAt: string;
   findingCount: number;
+  projectType: string | null;
+  compilerVersion: string | null;
+  contractsDiscovered: number | null;
+  contractsCompiled: number | null;
+  securityAnalysisStatus: string | null;
+  gateReasons: string[];
+  coverage: string | null;
 }
 
 export function countBySeverity(findings: Array<{ severity: string }>): SeverityCounts {

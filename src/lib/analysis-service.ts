@@ -21,6 +21,14 @@ export interface AnalysisResult {
   completedAt: string | null;
   createdAt: string;
   findingCount: number;
+  projectType: string | null;
+  compilerVersion: string | null;
+  contractsDiscovered: number | null;
+  contractsCompiled: number | null;
+  contractsTargetedForScan: number | null;
+  securityAnalysisStatus: string | null;
+  gateReasons: string[];
+  coverage: string | null;
 }
 
 export interface AnalysisDetailResult extends AnalysisResult {
@@ -51,6 +59,14 @@ function mapAnalysisToResult(
     startedAt: Date | null;
     completedAt: Date | null;
     createdAt: Date;
+    projectType?: string | null;
+    compilerVersion?: string | null;
+    contractsDiscovered?: number | null;
+    contractsCompiled?: number | null;
+    contractsTargetedForScan?: number | null;
+    securityAnalysisStatus?: string | null;
+    gateReasons?: string[];
+    coverage?: string | null;
     findings?: Array<{ id: string }>;
   },
   findingCount?: number,
@@ -70,6 +86,14 @@ function mapAnalysisToResult(
     completedAt: analysis.completedAt?.toISOString() ?? null,
     createdAt: analysis.createdAt.toISOString(),
     findingCount: findingCount ?? analysis.findings?.length ?? 0,
+    projectType: analysis.projectType ?? null,
+    compilerVersion: analysis.compilerVersion ?? null,
+    contractsDiscovered: analysis.contractsDiscovered ?? null,
+    contractsCompiled: analysis.contractsCompiled ?? null,
+    contractsTargetedForScan: analysis.contractsTargetedForScan ?? null,
+    securityAnalysisStatus: analysis.securityAnalysisStatus ?? null,
+    gateReasons: analysis.gateReasons ?? [],
+    coverage: analysis.coverage ?? null,
   };
 }
 
@@ -89,6 +113,14 @@ function cachedToResult(cached: CachedAnalysis): AnalysisResult {
     completedAt: cached.completedAt,
     createdAt: cached.createdAt,
     findingCount: cached.findings.length,
+    projectType: cached.projectType ?? null,
+    compilerVersion: cached.compilerVersion ?? null,
+    contractsDiscovered: cached.contractsDiscovered ?? null,
+    contractsCompiled: cached.contractsCompiled ?? null,
+    contractsTargetedForScan: cached.contractsTargetedForScan ?? null,
+    securityAnalysisStatus: cached.securityAnalysisStatus ?? null,
+    gateReasons: cached.gateReasons ?? [],
+    coverage: cached.coverage ?? null,
   };
 }
 
@@ -103,21 +135,18 @@ export async function getAnalysisById(
   analysisId: string,
   projectId?: string,
 ): Promise<AnalysisResult | null> {
-  // Check cache first for terminal analyses
   const cached = await getCachedAnalysis(analysisId);
   if (cached && isTerminal(cached.status)) {
     if (projectId && cached.projectId !== projectId) return null;
     return cachedToResult(cached);
   }
 
-  // Query PostgreSQL
   const analysis = await db.analysis.findUnique({
     where: { id: analysisId },
     include: { findings: { select: { id: true } } },
   });
 
   if (!analysis) return null;
-
   if (projectId && analysis.projectId !== projectId) return null;
 
   return mapAnalysisToResult(analysis);
@@ -127,14 +156,12 @@ export async function getAnalysisWithFindings(
   analysisId: string,
   projectId: string,
 ): Promise<AnalysisDetailResult | null> {
-  // Check cache first for terminal analyses
   const cached = await getCachedAnalysis(analysisId);
   if (cached && isTerminal(cached.status)) {
     if (cached.projectId !== projectId) return null;
     return cachedToDetail(cached);
   }
 
-  // Query PostgreSQL
   const analysis = await db.analysis.findFirst({
     where: { id: analysisId, projectId },
     include: {
@@ -165,7 +192,6 @@ export async function getAnalysisWithFindings(
     })),
   };
 
-  // Cache terminal analyses best-effort
   if (isTerminal(analysis.status)) {
     const cacheData: CachedAnalysis = {
       id: result.id,
@@ -182,6 +208,14 @@ export async function getAnalysisWithFindings(
       completedAt: result.completedAt,
       createdAt: result.createdAt,
       findings: result.findings,
+      projectType: result.projectType,
+      compilerVersion: result.compilerVersion,
+      contractsDiscovered: result.contractsDiscovered,
+      contractsCompiled: result.contractsCompiled,
+      contractsTargetedForScan: result.contractsTargetedForScan,
+      securityAnalysisStatus: result.securityAnalysisStatus,
+      gateReasons: result.gateReasons,
+      coverage: result.coverage,
     };
     await setCachedAnalysis(analysisId, cacheData);
   }

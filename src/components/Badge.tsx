@@ -7,6 +7,11 @@ const STATUS_STYLES: Record<string, string> = {
   BLOCKED: "badge-blocked",
   PASS: "badge-ready",
   FAIL: "badge-blocked",
+  NO_TESTS: "badge-queued",
+  NOT_RUN: "badge-queued",
+  UNSUPPORTED: "badge-blocked",
+  ERROR: "badge-blocked",
+  NO_CONTRACTS_FOUND: "badge-blocked",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -18,6 +23,11 @@ const STATUS_LABELS: Record<string, string> = {
   BLOCKED: "Blocked",
   PASS: "Pass",
   FAIL: "Fail",
+  NO_TESTS: "No Tests",
+  NOT_RUN: "Not Run",
+  UNSUPPORTED: "Unsupported",
+  ERROR: "Error",
+  NO_CONTRACTS_FOUND: "No Contracts",
 };
 
 interface StatusBadgeProps {
@@ -49,7 +59,11 @@ interface SeverityBadgeProps {
   className?: string;
 }
 
-export function SeverityBadge({ severity, count, className = "" }: SeverityBadgeProps) {
+export function SeverityBadge({
+  severity,
+  count,
+  className = "",
+}: SeverityBadgeProps) {
   const style = SEVERITY_STYLES[severity] ?? "badge-queued";
   const label = severity.charAt(0) + severity.slice(1).toLowerCase();
 
@@ -68,7 +82,10 @@ interface DeploymentBadgeProps {
   className?: string;
 }
 
-export function DeploymentBadge({ status, className = "" }: DeploymentBadgeProps) {
+export function DeploymentBadge({
+  status,
+  className = "",
+}: DeploymentBadgeProps) {
   if (!status) return null;
 
   const style = status === "READY" ? "badge-ready" : "badge-blocked";

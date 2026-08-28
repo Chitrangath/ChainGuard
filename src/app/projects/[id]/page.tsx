@@ -87,6 +87,14 @@ export default async function ProjectPage({
       completedAt: true,
       createdAt: true,
       _count: { select: { findings: true } },
+      projectType: true,
+      compilerVersion: true,
+      contractsDiscovered: true,
+      contractsCompiled: true,
+      securityAnalysisStatus: true,
+      contractsTargetedForScan: true,
+      gateReasons: true,
+      coverage: true,
     },
   });
 
@@ -118,6 +126,14 @@ export default async function ProjectPage({
       description: string;
       source: string;
     }>;
+    projectType: string | null;
+    compilerVersion: string | null;
+    contractsDiscovered: number | null;
+    contractsCompiled: number | null;
+    contractsTargetedForScan: number | null;
+    securityAnalysisStatus: string | null;
+    gateReasons: string[];
+    coverage: string | null;
   } | null = null;
 
   if (analysisId) {
@@ -159,6 +175,14 @@ export default async function ProjectPage({
           description: f.description,
           source: f.source,
         })),
+        projectType: selRaw.projectType ?? null,
+        compilerVersion: selRaw.compilerVersion ?? null,
+        contractsDiscovered: selRaw.contractsDiscovered ?? null,
+        contractsCompiled: selRaw.contractsCompiled ?? null,
+        contractsTargetedForScan: selRaw.contractsTargetedForScan ?? null,
+        securityAnalysisStatus: selRaw.securityAnalysisStatus ?? null,
+        gateReasons: selRaw.gateReasons ?? [],
+        coverage: selRaw.coverage ?? null,
       };
     }
   }
@@ -206,6 +230,14 @@ export default async function ProjectPage({
             description: f.description,
             source: f.source,
           })),
+          projectType: latestWithFindings.projectType ?? null,
+          compilerVersion: latestWithFindings.compilerVersion ?? null,
+          contractsDiscovered: latestWithFindings.contractsDiscovered ?? null,
+          contractsCompiled: latestWithFindings.contractsCompiled ?? null,
+          contractsTargetedForScan: latestWithFindings.contractsTargetedForScan ?? null,
+          securityAnalysisStatus: latestWithFindings.securityAnalysisStatus ?? null,
+          gateReasons: latestWithFindings.gateReasons ?? [],
+          coverage: latestWithFindings.coverage ?? null,
         };
       }
     } else {
@@ -224,6 +256,14 @@ export default async function ProjectPage({
         completedAt: null,
         createdAt: latest.createdAt.toISOString(),
         findings: [],
+        projectType: null,
+        compilerVersion: null,
+        contractsDiscovered: null,
+        contractsCompiled: null,
+        contractsTargetedForScan: null,
+        securityAnalysisStatus: null,
+        gateReasons: [],
+        coverage: null,
       };
     }
   }
@@ -260,6 +300,14 @@ export default async function ProjectPage({
           completedAt: a.completedAt?.toISOString() ?? null,
           createdAt: a.createdAt.toISOString(),
           findingCount: a._count.findings,
+          projectType: a.projectType ?? null,
+          compilerVersion: a.compilerVersion ?? null,
+          contractsDiscovered: a.contractsDiscovered ?? null,
+          contractsCompiled: a.contractsCompiled ?? null,
+          contractsTargetedForScan: a.contractsTargetedForScan ?? null,
+          securityAnalysisStatus: a.securityAnalysisStatus ?? null,
+          gateReasons: a.gateReasons ?? [],
+          coverage: a.coverage ?? null,
         }))}
         totalAnalyses={totalAnalyses}
         selectedAnalysisId={analysisId ?? null}

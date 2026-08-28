@@ -1,4 +1,5 @@
 import type { Severity } from "../generated/prisma/enums";
+import type { StaticAnalysisResult } from "../../worker/types";
 
 type SlitherImpact = "High" | "Medium" | "Low" | "Informational";
 
@@ -103,4 +104,72 @@ export function parseSlitherOutput(rawJson: string): ParsedFinding[] {
       source: "slither",
     };
   });
+}
+
+export function classifySlitherResult(
+  rawJson: string,
+  exitCode: number,
+  stderr: string,
+  contractsTargeted: number,
+): StaticAnalysisResult {
+  if (stderr === "TIMEOUT") {
+    return {
+      status: "FAIL",
+      reasonCode: "TIMEOUT",
+      safeMessage: "Slither scan timed out",
+    };
+  }
+
+  if (!rawJson || rawJson.trim() === "") {
+    return {
+      status: "FAIL",
+      reasonCode: "EMPTY_OUTPUT",
+      safeMessage: "Slither produced no output",
+    };
+  }
+
+  let parsed: SlitherOutput;
+  try {
+    parsed = JSON.parse(rawJson) as SlitherOutput;
+  } catch {
+    return {
+      status: "FAIL",
+      reasonCode: "INVALID_OUTPUT",
+      safeMessage: "Slither produced invalid JSON output",
+    };
+  }
+
+  if (parsed.success === false && !parsed.results?.detectors?.length) {
+    return {
+      status: "FAIL",
+      reasonCode: "SLITHER_INTERNAL_FAILURE",
+      safeMessage: parsed.error ?? "Slither reported an internal failure",
+    };
+  }
+
+  if (contractsTargeted === 0) {
+    return {
+      status: "FAIL",
+      reasonCode: "ZERO_CONTRACTS_SCANNED",
+      safeMessage: "No contracts were submitted to Slither",
+    };
+  }
+
+  const detectors = parsed.results?.detectors;
+  if (!Array.isArray(detectors)) {
+    return {
+      status: "FAIL",
+      reasonCode: "INVALID_OUTPUT",
+      safeMessage: "Slither output missing detector results",
+    };
+  }
+
+  const findings = parseSlitherOutput(rawJson);
+
+  return {
+    status: "PASS",
+    findings,
+    contractsScanned: contractsTargeted,
+    tool: "SLITHER",
+  };
 }

@@ -20,21 +20,29 @@ model Project {
 }
 
 model Analysis {
-  id                String             @id @default(cuid())
-  projectId         String
-  status            AnalysisStatus     @default(QUEUED)
-  riskScore         Int?
-  deploymentStatus  DeploymentStatus?
-  compilationStatus CompilationStatus?
-  testStatus        TestStatus?
-  totalTests        Int?
-  passedTests       Int?
-  failedTests       Int?
-  startedAt         DateTime?
-  completedAt       DateTime?
-  createdAt         DateTime           @default(now())
-  project           Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  findings          Finding[]
+  id                      String                   @id @default(cuid())
+  projectId               String
+  status                  AnalysisStatus           @default(QUEUED)
+  riskScore               Int?
+  deploymentStatus        DeploymentStatus?
+  compilationStatus       CompilationStatus?
+  testStatus              TestStatus?
+  totalTests              Int?
+  passedTests             Int?
+  failedTests             Int?
+  startedAt               DateTime?
+  completedAt             DateTime?
+  createdAt               DateTime                 @default(now())
+  project                 Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  findings                Finding[]
+  projectType             ProjectType?
+  compilerVersion         String?
+  contractsDiscovered     Int?
+  contractsCompiled       Int?
+  contractsTargetedForScan Int?
+  securityAnalysisStatus  SecurityAnalysisStatus?
+  gateReasons             String[]
+  coverage                AnalysisCoverage?
 
   @@map("analyses")
 }
@@ -74,6 +82,8 @@ enum DeploymentStatus {
 enum CompilationStatus {
   PASS
   FAIL
+  NOT_RUN
+  UNSUPPORTED
 
   @@map("compilation_status")
 }
@@ -81,6 +91,9 @@ enum CompilationStatus {
 enum TestStatus {
   PASS
   FAIL
+  NO_TESTS
+  NOT_RUN
+  ERROR
 
   @@map("test_status")
 }
@@ -92,4 +105,32 @@ enum Severity {
   LOW
 
   @@map("severity")
+}
+
+enum ProjectType {
+  FOUNDRY
+  HARDHAT
+  TRUFFLE
+  STANDALONE_SOLIDITY
+  UNKNOWN_SOLIDITY
+
+  @@map("project_type")
+}
+
+enum SecurityAnalysisStatus {
+  PASS
+  FAIL
+  NOT_RUN
+  UNSUPPORTED
+  NO_CONTRACTS_FOUND
+
+  @@map("security_analysis_status")
+}
+
+enum AnalysisCoverage {
+  FULL
+  PARTIAL
+  FAILED
+
+  @@map("analysis_coverage")
 }

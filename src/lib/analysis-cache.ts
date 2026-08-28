@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getRedisClient } from "./redis";
 
 const CACHE_TTL_SECONDS = 300;
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const KEY_PREFIX = "analysis:";
 
 const FindingSchema = z.object({
@@ -34,6 +34,14 @@ const AnalysisEnvelopeSchema = z.object({
     completedAt: z.string().nullable(),
     createdAt: z.string(),
     findings: z.array(FindingSchema),
+    projectType: z.string().nullable().optional(),
+    compilerVersion: z.string().nullable().optional(),
+    contractsDiscovered: z.number().nullable().optional(),
+    contractsCompiled: z.number().nullable().optional(),
+    contractsTargetedForScan: z.number().nullable().optional(),
+    securityAnalysisStatus: z.string().nullable().optional(),
+    gateReasons: z.array(z.string()).optional(),
+    coverage: z.string().nullable().optional(),
   }),
 });
 
@@ -79,7 +87,6 @@ export async function getCachedAnalysis(
 
     const envelope = parseEnvelope(raw);
     if (!envelope) {
-      // Malformed entry — best-effort delete
       try {
         await client.del(buildCacheKey(analysisId));
       } catch {

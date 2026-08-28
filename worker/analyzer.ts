@@ -4,14 +4,25 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { getDb } from "./db";
 import { calculateRisk } from "../src/lib/risk-engine";
-import { parseSlitherOutput } from "../src/lib/analysis-parser";
+import { classifySlitherResult, parseSlitherOutput } from "../src/lib/analysis-parser";
+import { discoverSolidityFiles } from "./discovery";
+import { selectCompiler, parseFoundryToml, parsePragma } from "./compiler";
+import { parseGitmodules, validateAllSubmodules } from "./submodule";
+import { foundryCompile, foundryTest } from "./adapters/foundry";
+import { standaloneCompile } from "./adapters/standalone";
 import type { Severity } from "../src/generated/prisma/enums";
+import type {
+  ProjectType,
+  CompilationResult,
+  TestResult,
+  StaticAnalysisResult,
+  GateReason,
+} from "./types";
 
 const execFileAsync = promisify(execFile);
 
 const WORKSPACE_BASE = "/tmp/guardrails";
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
-const SOLC_PATH = "/usr/local/lib/solc-0.8.20";
 const TOOL_TIMEOUT_MS = 120_000;
 const CLONE_TIMEOUT_MS = 60_000;
 const OVERALL_TIMEOUT_MS = 300_000;
@@ -44,6 +55,40 @@ export function parseTestOutput(testOutput: string): {
       ? (passedTests ?? 0) + (failedTests ?? 0)
       : null;
   return { passedTests, failedTests, totalTests };
+}
+
+export interface ForgeTestCounts {
+  passedTests: number | null;
+  failedTests: number | null;
+  totalTests: number | null;
+}
+
+export function classifyTestResult(
+  counts: ForgeTestCounts,
+  forgeExitStatus: "PASS" | "FAIL",
+): TestResult {
+  if (forgeExitStatus === "FAIL" && counts.totalTests === null) {
+    return { status: "NOT_RUN", reasonCode: "COMPILATION_FAILED" };
+  }
+
+  const executed =
+    (counts.passedTests !== null && counts.passedTests > 0) ||
+    (counts.failedTests !== null && counts.failedTests > 0) ||
+    (counts.totalTests !== null && counts.totalTests > 0);
+
+  if (!executed) {
+    return { status: "NO_TESTS", reasonCode: "NO_TEST_FILES" };
+  }
+
+  const passed = counts.passedTests ?? 0;
+  const failed = counts.failedTests ?? 0;
+  const total = counts.totalTests ?? passed + failed;
+
+  if (failed > 0) {
+    return { status: "FAIL", totalTests: total, passedTests: passed, failedTests: failed };
+  }
+
+  return { status: "PASS", totalTests: total, passedTests: passed, failedTests: 0 };
 }
 
 function validateUrl(url: string): boolean {
@@ -84,6 +129,7 @@ async function dockerRun(
   workspaceDir: string,
   command: string[],
   outputDir?: string,
+  containerWorkdir?: string,
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
@@ -100,10 +146,10 @@ async function dockerRun(
     "--cpus=2",
     "--pids-limit=512",
     "--user", `${uid}:${gid}`,
-    "--workdir", "/project",
+    "--workdir", containerWorkdir ?? "/project",
     "--tmpfs", "/tmp:rw,nosuid,nodev,exec,size=256m",
     "--env", "HOME=/tmp",
-    "-v", `${workspaceDir}:/project`,
+    "-v", `${workspaceDir}:/project:rw`,
     "-v", `${resolvedOutputDir}:/tmp/output:rw`,
     ANALYZER_IMAGE,
     ...command,
@@ -116,29 +162,153 @@ async function gitClone(
   dest: string,
 ): Promise<{ exitCode: number; stderr: string }> {
   fs.mkdirSync(dest, { recursive: true });
-  const result = await runCommand("git", ["clone", "--depth", "1", url, path.join(dest, "repo")], {
-    timeout: CLONE_TIMEOUT_MS,
-  });
+  const result = await runCommand(
+    "git",
+    ["clone", "--depth", "1", url, path.join(dest, "repo")],
+    { timeout: CLONE_TIMEOUT_MS },
+  );
   return { exitCode: result.exitCode, stderr: result.stderr };
 }
 
-function findFoundryProject(repoDir: string): string {
-  // Check if foundry.toml is at repo root
-  if (fs.existsSync(path.join(repoDir, "foundry.toml"))) {
-    return repoDir;
+async function initSubmodules(
+  repoDir: string,
+  parentRepoUrl: string,
+): Promise<void> {
+  const gitmodulesPath = path.join(repoDir, ".gitmodules");
+  if (!fs.existsSync(gitmodulesPath)) return;
+
+  const content = fs.readFileSync(gitmodulesPath, "utf-8");
+  const entries = parseGitmodules(content);
+  if (entries.length === 0) return;
+
+  const validation = validateAllSubmodules(entries, parentRepoUrl);
+  if (!validation.valid) {
+    console.log(`[analyzer] Submodule validation failed: ${validation.rejected.map((r) => r.reason).join(", ")}`);
+    return;
   }
-  // Search one level deep for foundry.toml
-  const entries = fs.readdirSync(repoDir, { withFileTypes: true });
-  for (const entry of entries) {
-    if (entry.isDirectory() && !entry.name.startsWith(".") && entry.name !== "node_modules") {
-      const subDir = path.join(repoDir, entry.name);
-      if (fs.existsSync(path.join(subDir, "foundry.toml"))) {
-        return subDir;
+
+  for (const sub of validation.urls) {
+    const subPath = path.join(repoDir, sub.name);
+    await runCommand(
+      "git",
+      [
+        "-c", "protocol.file.allow=never",
+        "submodule", "update", "--init", "--depth", "1",
+        "--single-branch", sub.name,
+      ],
+      { cwd: repoDir, timeout: CLONE_TIMEOUT_MS },
+    );
+  }
+}
+
+function classifyProject(repoDir: string, discovery: ReturnType<typeof discoverSolidityFiles>): ProjectType {
+  const roots = discovery.projectRoots;
+  for (const root of roots) {
+    if (fs.existsSync(path.join(root, "foundry.toml"))) return "FOUNDRY";
+  }
+
+  if (fs.existsSync(path.join(repoDir, "hardhat.config.js")) ||
+      fs.existsSync(path.join(repoDir, "hardhat.config.ts"))) {
+    return "HARDHAT";
+  }
+
+  if (fs.existsSync(path.join(repoDir, "truffle-config.js"))) {
+    return "TRUFFLE";
+  }
+
+  if (discovery.firstPartyContracts.length > 0) {
+    return "STANDALONE_SOLIDITY";
+  }
+
+  return "UNKNOWN_SOLIDITY";
+}
+
+function selectTarget(
+  projectType: ProjectType,
+  discovery: ReturnType<typeof discoverSolidityFiles>,
+  repoDir: string,
+): { targetRoot: string; sourcePaths: string[] } {
+  if (projectType === "FOUNDRY") {
+    for (const root of discovery.projectRoots) {
+      if (fs.existsSync(path.join(root, "foundry.toml"))) {
+        const srcDir = path.join(root, "src");
+        const testDir = path.join(root, "test");
+        const sourcePaths = discovery.firstPartyContracts.filter(
+          (p) => p.startsWith(path.relative(repoDir, srcDir)) ||
+                 p.startsWith(path.relative(repoDir, testDir)),
+        );
+        return { targetRoot: root, sourcePaths };
       }
     }
   }
-  // Fall back to repo root (will likely fail but preserves existing behavior)
-  return repoDir;
+
+  return {
+    targetRoot: repoDir,
+    sourcePaths: discovery.firstPartyContracts,
+  };
+}
+
+function buildCompilerSelection(
+  projectType: ProjectType,
+  targetRoot: string,
+  sourcePaths: string[],
+  repoDir: string,
+) {
+  if (projectType === "FOUNDRY") {
+    const foundryTomlPath = path.join(targetRoot, "foundry.toml");
+    if (fs.existsSync(foundryTomlPath)) {
+      const content = fs.readFileSync(foundryTomlPath, "utf-8");
+      const config = parseFoundryToml(content);
+      const pragmas: string[] = [];
+      if (config.solcVersion) {
+        pragmas.push(config.solcVersion);
+      }
+      const selection = selectCompiler(pragmas);
+      selection.viaIr = config.viaIr;
+      selection.optimizationRuns = config.optimizerRuns;
+      return selection;
+    }
+  }
+
+  const pragmas: string[] = [];
+  for (const relPath of sourcePaths) {
+    const absPath = path.join(repoDir, relPath);
+    try {
+      const content = fs.readFileSync(absPath, "utf-8");
+      const filePragmas = parsePragma(content);
+      pragmas.push(...filePragmas);
+    } catch {
+      continue;
+    }
+  }
+
+  return selectCompiler(pragmas);
+}
+
+async function runSlither(
+  targetRoot: string,
+  workspaceDir: string,
+  outputDir: string,
+  compilerVersion: string,
+  contractsTargeted: number,
+): Promise<StaticAnalysisResult> {
+  const slitherJsonPath = "/tmp/output/slither.json";
+  const solcFile = `/usr/local/lib/solc-${compilerVersion}`;
+
+  const setupCmd = [
+    `slither . --json ${slitherJsonPath} --fail-high --solc ${solcFile}`,
+  ].join(" && ");
+
+  const result = await dockerRun(workspaceDir, ["sh", "-c", setupCmd], outputDir,
+    `/project/${path.relative(workspaceDir, targetRoot)}`);
+
+  let rawJson = "";
+  const slitherJsonFile = path.join(outputDir, "slither.json");
+  if (fs.existsSync(slitherJsonFile)) {
+    rawJson = fs.readFileSync(slitherJsonFile, "utf-8");
+  }
+
+  return classifySlitherResult(rawJson, result.exitCode, result.stderr, contractsTargeted);
 }
 
 export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult> {
@@ -163,81 +333,150 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       throw new Error(`Clone failed: ${cloneResult.stderr}`);
     }
 
+    await initSubmodules(repoDir, ctx.repositoryUrl);
+
     await db.analysis.update({
       where: { id: ctx.analysisId },
       data: { status: "RUNNING", startedAt: new Date() },
     });
 
-    const foundryDir = findFoundryProject(repoDir);
-    const buildResult = await dockerRun(foundryDir, ["forge", "build", "--use", SOLC_PATH]);
-    const compilationStatus = buildResult.exitCode === 0 ? "PASS" : "FAIL";
+    const discovery = discoverSolidityFiles(repoDir);
+    const projectType = classifyProject(repoDir, discovery);
+    const { targetRoot, sourcePaths } = selectTarget(projectType, discovery, repoDir);
 
-    let testStatus: "PASS" | "FAIL" = "PASS";
-    let totalTests: number | null = null;
-    let passedTests: number | null = null;
-    let failedTests: number | null = null;
-
-    if (compilationStatus === "PASS") {
-      const testResult = await dockerRun(foundryDir, ["forge", "test", "--use", SOLC_PATH]);
-      testStatus = testResult.exitCode === 0 ? "PASS" : "FAIL";
-
-      const testOutput = testResult.stdout + testResult.stderr;
-      const counts = parseTestOutput(testOutput);
-      passedTests = counts.passedTests;
-      failedTests = counts.failedTests;
-      totalTests = counts.totalTests;
+    if (sourcePaths.length === 0) {
+      await db.analysis.update({
+        where: { id: ctx.analysisId },
+        data: {
+          status: "COMPLETED",
+          compilationStatus: "NOT_RUN",
+          testStatus: "NOT_RUN",
+          securityAnalysisStatus: "NO_CONTRACTS_FOUND",
+          coverage: "FAILED",
+          projectType,
+          contractsDiscovered: 0,
+          gateReasons: ["NO_CONTRACTS_FOUND"],
+          completedAt: new Date(),
+        },
+      });
+      return { success: true };
     }
 
-    const slitherJsonPath = "/tmp/output/slither.json";
-    const slitherResult = await dockerRun(foundryDir, [
-      "sh", "-c",
-      [
-        `mkdir -p "$HOME/.svm/0.8.20"`,
-        `cp /usr/local/lib/solc-0.8.20 "$HOME/.svm/0.8.20/solc-0.8.20"`,
-        `chmod +x "$HOME/.svm/0.8.20/solc-0.8.20"`,
-        `cp -r /root/.solc-select "$HOME/.solc-select" 2>/dev/null || true`,
-        `slither . --json ${slitherJsonPath} --fail-high`,
-      ].join(" && "),
-    ], outputDir);
+    const compilerSelection = buildCompilerSelection(projectType, targetRoot, sourcePaths, repoDir);
 
-    let findings: ReturnType<typeof parseSlitherOutput> = [];
-    const slitherJsonFile = path.join(outputDir, "slither.json");
-    if (fs.existsSync(slitherJsonFile)) {
-      const rawJson = fs.readFileSync(slitherJsonFile, "utf-8");
-      findings = parseSlitherOutput(rawJson);
-    } else if (slitherResult.exitCode !== 0 && slitherResult.stderr !== "TIMEOUT") {
-      const stderrOutput = slitherResult.stderr;
-      try {
-        findings = parseSlitherOutput(stderrOutput);
-      } catch {
-        // slither may have written to stderr instead of file
-      }
+    let compilation: CompilationResult;
+    if (compilerSelection.version === "UNSUPPORTED") {
+      compilation = {
+        status: "UNSUPPORTED",
+        reasonCode: "UNSUPPORTED_COMPILER",
+        safeMessage: `No compatible compiler for requested version`,
+      };
+    } else if (projectType === "FOUNDRY") {
+      compilation = await foundryCompile(
+        {
+          root: targetRoot,
+          projectType: "FOUNDRY",
+          sourcePaths,
+          configPath: path.join(targetRoot, "foundry.toml"),
+          compiler: compilerSelection,
+          testAvailability: { hasTests: sourcePaths.some((p) => p.includes("test")), testPaths: [] },
+          dependencyStrategy: { type: "foundry_lib", paths: ["lib"] },
+        },
+        wsDir,
+      );
+    } else {
+      compilation = await standaloneCompile(
+        {
+          root: targetRoot,
+          projectType: "STANDALONE_SOLIDITY",
+          sourcePaths,
+          configPath: null,
+          compiler: compilerSelection,
+          testAvailability: { hasTests: false, testPaths: [] },
+          dependencyStrategy: { type: "none", paths: [] },
+        },
+        wsDir,
+      );
+    }
+
+    let tests: TestResult;
+    if (compilation.status !== "PASS") {
+      tests = { status: "NOT_RUN", reasonCode: "COMPILATION_FAILED" };
+    } else if (projectType === "FOUNDRY") {
+      tests = await foundryTest(
+        {
+          root: targetRoot,
+          projectType: "FOUNDRY",
+          sourcePaths,
+          configPath: path.join(targetRoot, "foundry.toml"),
+          compiler: compilerSelection,
+          testAvailability: { hasTests: true, testPaths: [] },
+          dependencyStrategy: { type: "foundry_lib", paths: ["lib"] },
+        },
+        wsDir,
+      );
+    } else {
+      tests = { status: "NO_TESTS", reasonCode: "NO_TEST_FRAMEWORK" };
+    }
+
+    const contractsTargeted = compilation.status === "PASS" ? compilation.contractsCompiled : sourcePaths.length;
+
+    let staticAnalysis: StaticAnalysisResult;
+    if (compilation.status !== "PASS") {
+      staticAnalysis = { status: "NOT_RUN", reasonCode: "COMPILATION_FAILED", safeMessage: "Compilation failed, Slither skipped" };
+    } else {
+      staticAnalysis = await runSlither(targetRoot, wsDir, outputDir, compilerSelection.version, contractsTargeted);
+    }
+
+    const securityAnalysisStatus = staticAnalysis.status === "PASS" ? "PASS" :
+      staticAnalysis.status === "FAIL" ? "FAIL" : "NOT_RUN";
+
+    let coverage: "FULL" | "PARTIAL" | "FAILED" = "FULL";
+    if (compilation.status !== "PASS" || staticAnalysis.status !== "PASS") {
+      coverage = "PARTIAL";
+    }
+    if (projectType === "UNKNOWN_SOLIDITY" || compilation.status === "UNSUPPORTED") {
+      coverage = "FAILED";
     }
 
     const severityCounts: Record<Severity, number> = {
       CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0,
     };
+    const findings = staticAnalysis.status === "PASS" ? staticAnalysis.findings : [];
     for (const f of findings) {
       severityCounts[f.severity]++;
     }
 
     const risk = calculateRisk({
       severityCounts,
-      compilationStatus,
-      testStatus,
+      compilationStatus: compilation.status === "PASS" ? "PASS" : "FAIL",
+      testStatus: tests.status,
+      securityAnalysisStatus,
     });
+
+    const totalTests = tests.status === "PASS" || tests.status === "FAIL" ? tests.totalTests : null;
+    const passedTests = tests.status === "PASS" || tests.status === "FAIL" ? tests.passedTests : null;
+    const failedTests = tests.status === "PASS" || tests.status === "FAIL" ? tests.failedTests : null;
 
     await db.analysis.update({
       where: { id: ctx.analysisId },
       data: {
         status: "COMPLETED",
-        compilationStatus,
-        testStatus,
+        compilationStatus: compilation.status,
+        testStatus: tests.status,
         totalTests,
         passedTests,
         failedTests,
         riskScore: risk.riskScore,
         deploymentStatus: risk.deploymentStatus,
+        projectType,
+        compilerVersion: compilation.status === "PASS" ? compilation.compilerVersion : null,
+        contractsDiscovered: discovery.firstPartyContracts.length,
+        contractsCompiled: compilation.status === "PASS" ? compilation.contractsCompiled : null,
+        contractsTargetedForScan: contractsTargeted,
+        securityAnalysisStatus,
+        gateReasons: risk.gateReasons,
+        coverage,
         completedAt: new Date(),
       },
     });

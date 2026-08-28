@@ -33,6 +33,14 @@ export async function GET(
       startedAt: analysis.startedAt,
       completedAt: analysis.completedAt,
       createdAt: analysis.createdAt,
+      projectType: analysis.projectType,
+      compilerVersion: analysis.compilerVersion,
+      contractsDiscovered: analysis.contractsDiscovered,
+      contractsCompiled: analysis.contractsCompiled,
+      contractsTargetedForScan: analysis.contractsTargetedForScan,
+      securityAnalysisStatus: analysis.securityAnalysisStatus,
+      gateReasons: analysis.gateReasons,
+      coverage: analysis.coverage,
     });
   } catch (error) {
     return handleApiError(error);
