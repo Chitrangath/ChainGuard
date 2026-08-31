@@ -57,37 +57,26 @@ export default function NewProjectPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="mx-auto max-w-xl px-4 py-8">
       <Link
         href="/dashboard"
-        className="inline-flex items-center gap-1.5 text-sm font-medium focus-ring"
-        style={{ color: "var(--text-secondary)" }}
+        className="inline-flex items-center gap-1.5 text-body font-medium focus-ring"
+        style={{ color: "var(--color-text-secondary)" }}
       >
         <ArrowLeftIcon className="h-4 w-4" />
         Back to Dashboard
       </Link>
 
-      <h1
-        className="mt-6 text-2xl font-bold tracking-tight"
-        style={{ color: "var(--text-primary)" }}
-      >
-        New Project
-      </h1>
-      <p
-        className="mt-1 text-sm"
-        style={{ color: "var(--text-secondary)" }}
-      >
+      <h1 className="heading-page mt-6">New Project</h1>
+      <p className="mt-1 text-body" style={{ color: "var(--color-text-secondary)" }}>
         Add a Solidity repository for security analysis.
       </p>
 
       <form onSubmit={handleSubmit} className="mt-8 space-y-5">
         {/* Project Name */}
         <div>
-          <label
-            htmlFor="name"
-            className="input-label"
-          >
-            Project Name <span style={{ color: "var(--color-critical)" }}>*</span>
+          <label htmlFor="name" className="input-label">
+            Project Name <span style={{ color: "var(--color-destructive)" }}>*</span>
           </label>
           <input
             id="name"
@@ -110,11 +99,8 @@ export default function NewProjectPage() {
 
         {/* Repository URL */}
         <div>
-          <label
-            htmlFor="repositoryUrl"
-            className="input-label"
-          >
-            GitHub Repository URL <span style={{ color: "var(--color-critical)" }}>*</span>
+          <label htmlFor="repositoryUrl" className="input-label">
+            GitHub Repository URL <span style={{ color: "var(--color-destructive)" }}>*</span>
           </label>
           <input
             id="repositoryUrl"
@@ -141,10 +127,7 @@ export default function NewProjectPage() {
 
         {/* Description */}
         <div>
-          <label
-            htmlFor="description"
-            className="input-label"
-          >
+          <label htmlFor="description" className="input-label">
             Description
           </label>
           <textarea
@@ -168,12 +151,12 @@ export default function NewProjectPage() {
         {/* Server Error */}
         {serverError && (
           <div
-            className="rounded-lg border p-4 text-sm"
+            className="rounded-lg border p-4 text-body"
             role="alert"
             style={{
               background: "var(--color-blocked-bg)",
               borderColor: "var(--color-blocked-border)",
-              color: "var(--color-blocked)",
+              color: "var(--color-destructive)",
             }}
           >
             {serverError}
@@ -188,17 +171,12 @@ export default function NewProjectPage() {
             className="btn btn-primary focus-ring"
           >
             {loading ? (
-              <>
-                <span className="animate-pulse-subtle">Creating...</span>
-              </>
+              <span className="animate-pulse-subtle">Creating...</span>
             ) : (
               "Create Project"
             )}
           </button>
-          <Link
-            href="/dashboard"
-            className="btn btn-secondary focus-ring"
-          >
+          <Link href="/dashboard" className="btn btn-secondary focus-ring">
             Cancel
           </Link>
         </div>

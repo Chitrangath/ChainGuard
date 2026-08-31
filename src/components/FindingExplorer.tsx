@@ -10,6 +10,7 @@ import type { FindingData } from "@/lib/analysis-utils";
 interface FindingExplorerProps {
   findings: FindingData[];
   analysisStatus: string;
+  securityAnalysisStatus?: string | null;
 }
 
 const SEVERITY_FILTERS = [
@@ -23,6 +24,7 @@ const SEVERITY_FILTERS = [
 export function FindingExplorer({
   findings,
   analysisStatus,
+  securityAnalysisStatus,
 }: FindingExplorerProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState("ALL");
@@ -44,16 +46,8 @@ export function FindingExplorer({
   if (analysisStatus === "FAILED") {
     return (
       <div className="mt-8">
-        <h2
-          className="text-lg font-semibold"
-          style={{ color: "var(--text-primary)" }}
-        >
-          Findings
-        </h2>
-        <p
-          className="mt-3 text-sm"
-          style={{ color: "var(--text-muted)" }}
-        >
+        <h2 className="heading-section">Findings</h2>
+        <p className="mt-3 text-body" style={{ color: "var(--color-text-muted)" }}>
           Findings are unavailable because the analysis failed.
         </p>
       </div>
@@ -61,23 +55,18 @@ export function FindingExplorer({
   }
 
   if (findings.length === 0) {
+    const scanRan = securityAnalysisStatus === "PASS";
     return (
       <div className="mt-8">
-        <h2
-          className="text-lg font-semibold"
-          style={{ color: "var(--text-primary)" }}
-        >
-          Findings
-        </h2>
+        <h2 className="heading-section">Findings</h2>
         <div
           className="mt-3 rounded-lg border border-dashed p-6 text-center"
-          style={{ borderColor: "var(--border-default)" }}
+          style={{ borderColor: "var(--color-border)" }}
         >
-          <p
-            className="text-sm"
-            style={{ color: "var(--text-muted)" }}
-          >
-            No security findings detected. The analysis passed all checks.
+          <p className="text-body" style={{ color: "var(--color-text-muted)" }}>
+            {scanRan
+              ? "No security findings detected. The analysis passed all checks."
+              : "No findings to display."}
           </p>
         </div>
       </div>
@@ -86,16 +75,13 @@ export function FindingExplorer({
 
   return (
     <div className="mt-8">
-      <h2
-        className="text-lg font-semibold"
-        style={{ color: "var(--text-primary)" }}
-      >
-        Findings
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className="heading-section">Findings</h2>
+      </div>
 
       {/* Severity Filters */}
       <div
-        className="mt-3 flex flex-wrap gap-2"
+        className="mt-4 flex flex-wrap gap-2"
         role="group"
         aria-label="Filter findings by severity"
       >
@@ -105,35 +91,21 @@ export function FindingExplorer({
             filter.value === "ALL"
               ? findings.length
               : severityCounts[filter.value as keyof typeof severityCounts];
-
           return (
             <button
               key={filter.value}
               onClick={() => setSeverityFilter(filter.value)}
               aria-pressed={isActive}
-              className="btn focus-ring"
-              style={{
-                padding: "0.25rem 0.75rem",
-                fontSize: "0.75rem",
-                minHeight: "auto",
-                borderRadius: "9999px",
-                background: isActive
-                  ? "var(--color-action-primary)"
-                  : "var(--color-action-secondary)",
-                color: isActive
-                  ? "var(--text-inverse)"
-                  : "var(--text-secondary)",
-                border: `1px solid ${isActive ? "transparent" : "var(--border-default)"}`,
-              }}
+              className={`filter-pill focus-ring ${isActive ? "filter-pill-active" : ""}`}
             >
               {filter.label}
               <span
-                className="ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
+                className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
                 style={{
                   background: isActive
                     ? "rgba(255,255,255,0.2)"
-                    : "var(--surface-secondary)",
-                  color: isActive ? "inherit" : "var(--text-muted)",
+                    : "var(--color-surface-sunken)",
+                  color: isActive ? "inherit" : "var(--color-text-muted)",
                 }}
               >
                 {count}
@@ -147,12 +119,9 @@ export function FindingExplorer({
       {filteredFindings.length === 0 ? (
         <div
           className="mt-4 rounded-lg border border-dashed p-6 text-center"
-          style={{ borderColor: "var(--border-default)" }}
+          style={{ borderColor: "var(--color-border)" }}
         >
-          <p
-            className="text-sm"
-            style={{ color: "var(--text-muted)" }}
-          >
+          <p className="text-body" style={{ color: "var(--color-text-muted)" }}>
             No findings match the selected filter.
           </p>
         </div>
@@ -164,50 +133,23 @@ export function FindingExplorer({
             aria-label="Security findings"
           >
             <thead>
-              <tr
-                className="border-b"
-                style={{ borderColor: "var(--border-default)" }}
-              >
-                <th
-                  scope="col"
-                  className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
+              <tr className="table-header">
+                <th scope="col" className="px-3 py-2.5 text-left">
                   Severity
                 </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
+                <th scope="col" className="px-3 py-2.5 text-left">
                   Type
                 </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
+                <th scope="col" className="px-3 py-2.5 text-left">
                   Contract
                 </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
+                <th scope="col" className="px-3 py-2.5 text-left">
                   File
                 </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
+                <th scope="col" className="px-3 py-2.5 text-left">
                   Line
                 </th>
-                <th
-                  scope="col"
-                  className="px-3 py-2.5 text-left text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
+                <th scope="col" className="px-3 py-2.5 text-left">
                   <span className="sr-only">Expand</span>
                 </th>
               </tr>
@@ -242,39 +184,26 @@ function FindingRow({
   onToggle: () => void;
 }) {
   const detailId = `finding-detail-${finding.id}`;
-
   return (
     <>
-      <tr
-        className="border-b transition-colors"
-        style={{ borderColor: "var(--border-default)" }}
-      >
+      <tr className="table-row">
         <td className="px-3 py-2.5">
           <SeverityBadge severity={finding.severity} />
         </td>
-        <td
-          className="px-3 py-2.5 font-medium"
-          style={{ color: "var(--text-primary)" }}
-        >
+        <td className="px-3 py-2.5 font-medium" style={{ color: "var(--color-text)" }}>
           {finding.type}
         </td>
-        <td
-          className="px-3 py-2.5"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {finding.contract ?? "\u2014"}
+        <td className="px-3 py-2.5" style={{ color: "var(--color-text-secondary)" }}>
+          {finding.contract ?? "—"}
         </td>
         <td
-          className="px-3 py-2.5 font-mono text-xs"
-          style={{ color: "var(--text-secondary)" }}
+          className="px-3 py-2.5 text-code"
+          style={{ color: "var(--color-text-secondary)" }}
         >
-          {finding.file ?? "\u2014"}
+          {finding.file ?? "—"}
         </td>
-        <td
-          className="px-3 py-2.5"
-          style={{ color: "var(--text-secondary)" }}
-        >
-          {finding.line ?? "\u2014"}
+        <td className="px-3 py-2.5" style={{ color: "var(--color-text-secondary)" }}>
+          {finding.line ?? "—"}
         </td>
         <td className="px-3 py-2.5">
           <button
@@ -282,7 +211,7 @@ function FindingRow({
             aria-expanded={isExpanded}
             aria-controls={detailId}
             className="inline-flex items-center justify-center rounded p-1 transition-colors focus-ring"
-            style={{ color: "var(--text-muted)" }}
+            style={{ color: "var(--color-text-muted)" }}
           >
             <ChevronIcon
               className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`}
@@ -294,67 +223,41 @@ function FindingRow({
         </td>
       </tr>
       {isExpanded && (
-        <tr id={detailId} role="row">
+        <tr id={detailId}>
           <td
             colSpan={6}
             className="px-3 py-4"
-            style={{ background: "var(--surface-secondary)" }}
+            style={{ background: "var(--color-surface-sunken)" }}
           >
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt
-                  className="text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Description
-                </dt>
+                <dt className="text-label">Description</dt>
                 <dd
                   className="mt-1 leading-relaxed"
-                  style={{ color: "var(--text-primary)" }}
+                  style={{ color: "var(--color-text)" }}
                 >
                   {finding.description}
                 </dd>
               </div>
               <div>
-                <dt
-                  className="text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Source
-                </dt>
-                <dd
-                  className="mt-1"
-                  style={{ color: "var(--text-primary)" }}
-                >
+                <dt className="text-label">Source</dt>
+                <dd className="mt-1" style={{ color: "var(--color-text)" }}>
                   {finding.source}
                 </dd>
               </div>
               {finding.contract && (
                 <div>
-                  <dt
-                    className="text-xs font-medium uppercase tracking-wide"
-                    style={{ color: "var(--text-muted)" }}
-                  >
-                    Contract
-                  </dt>
-                  <dd
-                    className="mt-1"
-                    style={{ color: "var(--text-primary)" }}
-                  >
+                  <dt className="text-label">Contract</dt>
+                  <dd className="mt-1" style={{ color: "var(--color-text)" }}>
                     {finding.contract}
                   </dd>
                 </div>
               )}
               <div>
-                <dt
-                  className="text-xs font-medium uppercase tracking-wide"
-                  style={{ color: "var(--text-muted)" }}
-                >
-                  Location
-                </dt>
+                <dt className="text-label">Location</dt>
                 <dd
-                  className="mt-1 font-mono text-xs"
-                  style={{ color: "var(--text-primary)" }}
+                  className="mt-1 text-code"
+                  style={{ color: "var(--color-text)" }}
                 >
                   {finding.file ?? "unknown"}
                   {finding.line ? `:${finding.line}` : ""}

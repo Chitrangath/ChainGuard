@@ -22,17 +22,12 @@ export function RiskScore({ score, size = "lg" }: RiskScoreProps) {
     return (
       <div className="text-center">
         <div
-          className={size === "lg" ? "text-4xl" : "text-lg"}
-          style={{ color: "var(--text-muted)" }}
+          className={size === "lg" ? "text-metric" : "text-metric-sm"}
+          style={{ color: "var(--color-text-muted)" }}
         >
-          &mdash;
+          —
         </div>
-        <div
-          className="mt-1 text-xs"
-          style={{ color: "var(--text-muted)" }}
-        >
-          No score
-        </div>
+        <div className="mt-1 text-metadata">No score</div>
       </div>
     );
   }
@@ -43,22 +38,14 @@ export function RiskScore({ score, size = "lg" }: RiskScoreProps) {
   return (
     <div className="text-center">
       <div
-        className={`${size === "lg" ? "text-5xl" : "text-xl"} font-bold tracking-tight`}
+        className={size === "lg" ? "text-metric" : "text-metric-sm"}
         style={{ color }}
       >
         {score}
       </div>
-      <div
-        className={`${size === "lg" ? "text-sm" : "text-xs"} mt-0.5`}
-        style={{ color: "var(--text-muted)" }}
-      >
-        /100
-      </div>
+      <div className="text-metadata">/100</div>
       {size === "lg" && (
-        <div
-          className="mt-1 text-xs font-medium"
-          style={{ color }}
-        >
+        <div className="mt-1 text-label" style={{ color }}>
           {label}
         </div>
       )}

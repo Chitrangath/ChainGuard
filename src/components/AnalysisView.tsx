@@ -1,14 +1,12 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { AnalysisControls } from "./AnalysisControls";
 import { AnalysisSummary } from "./AnalysisSummary";
 import { FindingExplorer } from "./FindingExplorer";
 import { AnalysisHistory } from "./AnalysisHistory";
-import {
-  ExternalLinkIcon,
-  ShieldIcon,
-} from "./icons";
+import { ExternalLinkIcon, ShieldIcon, ArrowLeftIcon } from "./icons";
 import { StatusBadge } from "./Badge";
 import type { AnalysisData, AnalysisSummaryData } from "@/lib/analysis-utils";
 
@@ -29,15 +27,6 @@ interface AnalysisViewProps {
   historyAnalyses: AnalysisSummaryData[];
   totalAnalyses: number;
   selectedAnalysisId: string | null;
-}
-
-function formatRelativeDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
 }
 
 export function AnalysisView({
@@ -62,78 +51,56 @@ export function AnalysisView({
 
   return (
     <>
+      {/* Page Header */}
+      <div className="flex items-center gap-3">
+        <Link
+          className="btn btn-ghost btn-sm focus-ring"
+          href="/dashboard"
+        >
+          <ArrowLeftIcon className="h-4 w-4" />
+          <span className="hidden sm:inline">Dashboard</span>
+        </Link>
+      </div>
+
       {/* Project Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+      <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
-            <ShieldIcon
-              className="h-5 w-5 shrink-0"
-              style={{ color: "var(--text-muted)" }}
-            />
-            <h1
-              className="truncate text-2xl font-bold tracking-tight"
-              style={{ color: "var(--text-primary)" }}
-            >
-              {project.name}
-            </h1>
-            {activeAnalysis && (
-              <StatusBadge status={activeAnalysis.status} />
-            )}
+            <h1 className="heading-page truncate">{project.name}</h1>
+            {activeAnalysis && <StatusBadge status={activeAnalysis.status} />}
           </div>
           <div className="mt-1.5 flex items-center gap-1.5">
             <a
               href={project.repositoryUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 font-mono text-sm focus-ring"
-              style={{ color: "var(--color-low)" }}
+              className="inline-flex items-center gap-1 text-code text-sm focus-ring"
+              style={{ color: "var(--color-primary)" }}
             >
               {project.repositoryUrl.replace(/^https:\/\/github\.com\//, "")}
               <ExternalLinkIcon className="h-3.5 w-3.5" />
             </a>
           </div>
           {project.description && (
-            <p
-              className="mt-2 text-sm leading-relaxed"
-              style={{ color: "var(--text-secondary)" }}
-            >
+            <p className="mt-2 text-body" style={{ color: "var(--color-text-secondary)" }}>
               {project.description}
             </p>
           )}
-          <p
-            className="mt-1 text-xs"
-            style={{ color: "var(--text-muted)" }}
-          >
-            Created {formatRelativeDate(project.createdAt)}
-          </p>
         </div>
-        <AnalysisControls
-          projectId={project.id}
-          activeAnalysis={activeAnalysis}
-        />
+        <AnalysisControls projectId={project.id} activeAnalysis={activeAnalysis} />
       </div>
 
       {/* Historical Analysis Banner */}
       {isViewingHistorical && (
         <div
           className="mt-4 flex items-center justify-between rounded-lg border px-4 py-3"
-          style={{
-            background: "var(--color-medium-bg)",
-            borderColor: "var(--color-medium-border)",
-          }}
+          style={{ background: "var(--color-primary-muted)", borderColor: "var(--color-primary)" }}
           role="status"
         >
-          <span
-            className="text-sm font-medium"
-            style={{ color: "var(--color-medium)" }}
-          >
+          <span className="text-body font-medium" style={{ color: "var(--color-primary)" }}>
             Viewing historical analysis
           </span>
-          <button
-            onClick={handleBackToLatest}
-            className="btn btn-ghost btn-sm focus-ring"
-            style={{ color: "var(--color-medium)" }}
-          >
+          <button onClick={handleBackToLatest} className="btn btn-ghost btn-sm focus-ring" style={{ color: "var(--color-primary)" }}>
             Back to latest
           </button>
         </div>
@@ -143,54 +110,34 @@ export function AnalysisView({
       {selectedAnalysis ? (
         <>
           <AnalysisSummary analysis={selectedAnalysis} />
-          <FindingExplorer
-            findings={selectedAnalysis.findings}
-            analysisStatus={selectedAnalysis.status}
-          />
+          <FindingExplorer findings={selectedAnalysis.findings} analysisStatus={selectedAnalysis.status} securityAnalysisStatus={selectedAnalysis.securityAnalysisStatus} />
         </>
       ) : activeAnalysis ? (
         <div
           className="mt-8 rounded-lg border p-8 text-center"
-          style={{
-            background: "var(--color-running-bg)",
-            borderColor: "var(--color-running-border)",
-          }}
+          style={{ background: "var(--color-running-bg)", borderColor: "var(--color-running-border)" }}
         >
           <div className="flex items-center justify-center gap-2">
             <span
               className="h-2 w-2 rounded-full animate-pulse-subtle"
               style={{ background: "var(--color-running)" }}
             />
-            <p
-              className="text-sm font-medium"
-              style={{ color: "var(--color-running)" }}
-            >
-              Analysis is{" "}
-              {activeAnalysis.status === "QUEUED" ? "queued" : "running"}...
+            <p className="text-body font-medium" style={{ color: "var(--color-running)" }}>
+              Analysis is {activeAnalysis.status === "QUEUED" ? "queued" : "running"}...
             </p>
           </div>
-          <p
-            className="mt-2 text-xs"
-            style={{ color: "var(--text-muted)" }}
-          >
+          <p className="mt-2 text-metadata" style={{ color: "var(--color-text-muted)" }}>
             The page will update automatically when complete.
           </p>
         </div>
       ) : (
         <div
           className="mt-8 rounded-lg border border-dashed p-8 text-center"
-          style={{ borderColor: "var(--border-default)" }}
+          style={{ borderColor: "var(--color-border)" }}
         >
-          <ShieldIcon
-            className="mx-auto h-8 w-8"
-            style={{ color: "var(--text-muted)" }}
-          />
-          <p
-            className="mt-2 text-sm"
-            style={{ color: "var(--text-muted)" }}
-          >
-            No analysis yet. Run your first analysis to see security results
-            here.
+          <ShieldIcon className="mx-auto h-8 w-8" style={{ color: "var(--color-text-muted)" }} />
+          <p className="mt-2 text-body" style={{ color: "var(--color-text-muted)" }}>
+            No analysis yet. Run your first analysis to see security results here.
           </p>
         </div>
       )}
