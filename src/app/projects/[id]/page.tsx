@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { AnalysisView } from "@/components/AnalysisView";
+import { presentEvidence, type EvidenceStatus } from "@/lib/evidence";
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +96,7 @@ export default async function ProjectPage({
       contractsTargetedForScan: true,
       gateReasons: true,
       coverage: true,
+      evidenceVersion: true,
     },
   });
 
@@ -125,6 +127,7 @@ export default async function ProjectPage({
       line: number | null;
       description: string;
       source: string;
+      scope: string;
     }>;
     projectType: string | null;
     compilerVersion: string | null;
@@ -134,6 +137,7 @@ export default async function ProjectPage({
     securityAnalysisStatus: string | null;
     gateReasons: string[];
     coverage: string | null;
+    evidenceStatus: EvidenceStatus;
   } | null = null;
 
   if (analysisId) {
@@ -152,11 +156,12 @@ export default async function ProjectPage({
     });
 
     if (selRaw) {
+      const evidence = presentEvidence(selRaw.evidenceVersion, selRaw.riskScore, selRaw.deploymentStatus);
       selectedAnalysis = {
         id: selRaw.id,
         status: selRaw.status,
-        riskScore: selRaw.riskScore,
-        deploymentStatus: selRaw.deploymentStatus,
+        riskScore: evidence.riskScore,
+        deploymentStatus: evidence.deploymentStatus,
         compilationStatus: selRaw.compilationStatus,
         testStatus: selRaw.testStatus,
         totalTests: selRaw.totalTests,
@@ -174,6 +179,7 @@ export default async function ProjectPage({
           line: f.line,
           description: f.description,
           source: f.source,
+          scope: f.scope,
         })),
         projectType: selRaw.projectType ?? null,
         compilerVersion: selRaw.compilerVersion ?? null,
@@ -183,6 +189,7 @@ export default async function ProjectPage({
         securityAnalysisStatus: selRaw.securityAnalysisStatus ?? null,
         gateReasons: selRaw.gateReasons ?? [],
         coverage: selRaw.coverage ?? null,
+        evidenceStatus: evidence.evidenceStatus,
       };
     }
   }
@@ -207,11 +214,12 @@ export default async function ProjectPage({
       });
 
       if (latestWithFindings) {
+        const evidence = presentEvidence(latestWithFindings.evidenceVersion, latestWithFindings.riskScore, latestWithFindings.deploymentStatus);
         selectedAnalysis = {
           id: latestWithFindings.id,
           status: latestWithFindings.status,
-          riskScore: latestWithFindings.riskScore,
-          deploymentStatus: latestWithFindings.deploymentStatus,
+          riskScore: evidence.riskScore,
+          deploymentStatus: evidence.deploymentStatus,
           compilationStatus: latestWithFindings.compilationStatus,
           testStatus: latestWithFindings.testStatus,
           totalTests: latestWithFindings.totalTests,
@@ -229,6 +237,7 @@ export default async function ProjectPage({
             line: f.line,
             description: f.description,
             source: f.source,
+            scope: f.scope,
           })),
           projectType: latestWithFindings.projectType ?? null,
           compilerVersion: latestWithFindings.compilerVersion ?? null,
@@ -238,6 +247,7 @@ export default async function ProjectPage({
           securityAnalysisStatus: latestWithFindings.securityAnalysisStatus ?? null,
           gateReasons: latestWithFindings.gateReasons ?? [],
           coverage: latestWithFindings.coverage ?? null,
+          evidenceStatus: evidence.evidenceStatus,
         };
       }
     } else {
@@ -264,6 +274,7 @@ export default async function ProjectPage({
         securityAnalysisStatus: null,
         gateReasons: [],
         coverage: null,
+        evidenceStatus: "VERIFIED",
       };
     }
   }
@@ -289,8 +300,7 @@ export default async function ProjectPage({
         historyAnalyses={historyAnalyses.map((a) => ({
           id: a.id,
           status: a.status,
-          riskScore: a.riskScore,
-          deploymentStatus: a.deploymentStatus,
+          ...presentEvidence(a.evidenceVersion, a.riskScore, a.deploymentStatus),
           compilationStatus: a.compilationStatus,
           testStatus: a.testStatus,
           totalTests: a.totalTests,

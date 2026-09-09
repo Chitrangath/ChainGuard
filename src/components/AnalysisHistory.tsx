@@ -111,6 +111,9 @@ export function AnalysisHistory({
                     {shortId}
                   </span>
                   <StatusBadge status={analysis.status} />
+                  {analysis.evidenceStatus === "LEGACY_UNVERIFIED" && (
+                    <span className="text-metadata">Legacy — rerun required</span>
+                  )}
                 </div>
                 <div className="flex items-center gap-4">
                   {analysis.riskScore !== null && (

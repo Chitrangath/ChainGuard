@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { handleApiError } from "@/lib/api-error";
+import { presentEvidence } from "@/lib/evidence";
 
 export async function GET(
   _request: NextRequest,
@@ -29,6 +30,9 @@ export async function GET(
     }
 
     const [latest, ...history] = project.analyses;
+    const latestEvidence = latest
+      ? presentEvidence(latest.evidenceVersion, latest.riskScore, latest.deploymentStatus)
+      : null;
 
     return NextResponse.json({
       id: project.id,
@@ -41,8 +45,9 @@ export async function GET(
         ? {
             id: latest.id,
             status: latest.status,
-            riskScore: latest.riskScore,
-            deploymentStatus: latest.deploymentStatus,
+            riskScore: latestEvidence?.riskScore ?? null,
+            deploymentStatus: latestEvidence?.deploymentStatus ?? null,
+            evidenceStatus: latestEvidence?.evidenceStatus,
             compilationStatus: latest.compilationStatus,
             testStatus: latest.testStatus,
             totalTests: latest.totalTests,
@@ -60,14 +65,14 @@ export async function GET(
               line: f.line,
               description: f.description,
               source: f.source,
+              scope: f.scope,
             })),
           }
         : null,
       analysisHistory: history.map((a) => ({
         id: a.id,
         status: a.status,
-        riskScore: a.riskScore,
-        deploymentStatus: a.deploymentStatus,
+        ...presentEvidence(a.evidenceVersion, a.riskScore, a.deploymentStatus),
         createdAt: a.createdAt.toISOString(),
       })),
     });

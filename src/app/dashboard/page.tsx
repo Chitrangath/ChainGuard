@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { PlusIcon } from "@/components/icons";
 import { ProjectExplorer } from "@/components/ProjectExplorer";
 import { SecurityPostureCard } from "@/components/SecurityPostureCard";
+import { presentEvidence, type EvidenceStatus } from "@/lib/evidence";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,8 @@ interface ProjectSummary {
     riskScore: number | null;
     deploymentStatus: string | null;
     createdAt: Date;
+    evidenceVersion: number | null;
+    evidenceStatus?: EvidenceStatus;
   }[];
 }
 
@@ -38,6 +41,7 @@ export default async function DashboardPage() {
             riskScore: true,
             deploymentStatus: true,
             createdAt: true,
+            evidenceVersion: true,
           },
         },
       },
@@ -45,6 +49,14 @@ export default async function DashboardPage() {
   } catch {
     dbError = true;
   }
+
+  projects = projects.map((project) => ({
+    ...project,
+    analyses: project.analyses.map((analysis) => ({
+      ...analysis,
+      ...presentEvidence(analysis.evidenceVersion, analysis.riskScore, analysis.deploymentStatus),
+    })),
+  }));
 
   const totalCount = projects.length;
   const readyCount = projects.filter((p) =>

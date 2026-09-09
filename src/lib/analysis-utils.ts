@@ -14,6 +14,7 @@ export interface FindingData {
   line: number | null;
   description: string;
   source: string;
+  scope: string;
 }
 
 export interface AnalysisData {
@@ -38,6 +39,7 @@ export interface AnalysisData {
   securityAnalysisStatus: string | null;
   gateReasons: string[];
   coverage: string | null;
+  evidenceStatus: "VERIFIED" | "LEGACY_UNVERIFIED";
 }
 
 export interface AnalysisSummaryData {
@@ -61,6 +63,7 @@ export interface AnalysisSummaryData {
   securityAnalysisStatus: string | null;
   gateReasons: string[];
   coverage: string | null;
+  evidenceStatus: "VERIFIED" | "LEGACY_UNVERIFIED";
 }
 
 export function countBySeverity(findings: Array<{ severity: string }>): SeverityCounts {

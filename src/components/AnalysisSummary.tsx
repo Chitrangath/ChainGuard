@@ -80,6 +80,18 @@ function formatGateReasons(reasons: string[]): string[] {
 }
 
 export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
+  if (analysis.evidenceStatus === "LEGACY_UNVERIFIED") {
+    return (
+      <div className="mt-8 rounded-lg border p-6" role="status" style={{ borderColor: "var(--color-medium)" }}>
+        <div className="text-label" style={{ color: "var(--color-medium)" }}>
+          Legacy analysis — rerun required
+        </div>
+        <p className="mt-2 text-body" style={{ color: "var(--color-text-secondary)" }}>
+          This historical result predates the current evidence model. Its score and findings are not verified.
+        </p>
+      </div>
+    );
+  }
   const severityCounts = countBySeverity(analysis.findings);
   const totalFindings = analysis.findings.length;
   const duration = formatDuration(analysis.startedAt, analysis.completedAt);

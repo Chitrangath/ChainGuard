@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { createProjectSchema } from "@/lib/validation";
 import { handleApiError } from "@/lib/api-error";
+import { presentEvidence } from "@/lib/evidence";
 
 export async function GET() {
   try {
@@ -15,16 +16,23 @@ export async function GET() {
       },
     });
 
-    const projectsWithLatest = projects.map((project) => ({
+    const projectsWithLatest = projects.map((project) => {
+      const latest = project.analyses[0];
+      const evidence = latest
+        ? presentEvidence(latest.evidenceVersion, latest.riskScore, latest.deploymentStatus)
+        : null;
+      return ({
       id: project.id,
       name: project.name,
       repositoryUrl: project.repositoryUrl,
       description: project.description,
       createdAt: project.createdAt.toISOString(),
       updatedAt: project.updatedAt.toISOString(),
-      latestRiskScore: project.analyses[0]?.riskScore ?? null,
-      latestDeploymentStatus: project.analyses[0]?.deploymentStatus ?? null,
-    }));
+      latestRiskScore: evidence?.riskScore ?? null,
+      latestDeploymentStatus: evidence?.deploymentStatus ?? null,
+      latestEvidenceStatus: evidence?.evidenceStatus ?? null,
+    });
+    });
 
     return NextResponse.json(projectsWithLatest);
   } catch (error) {

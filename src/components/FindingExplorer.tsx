@@ -245,6 +245,12 @@ function FindingRow({
                   {finding.source}
                 </dd>
               </div>
+              <div>
+                <dt className="text-label">Scope</dt>
+                <dd className="mt-1" style={{ color: "var(--color-text)" }}>
+                  {finding.scope.replaceAll("_", " ").toLowerCase()}
+                </dd>
+              </div>
               {finding.contract && (
                 <div>
                   <dt className="text-label">Contract</dt>

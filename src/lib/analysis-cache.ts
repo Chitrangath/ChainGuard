@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getRedisClient } from "./redis";
 
 const CACHE_TTL_SECONDS = 300;
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 const KEY_PREFIX = "analysis:";
 
 const FindingSchema = z.object({
@@ -14,6 +14,7 @@ const FindingSchema = z.object({
   line: z.number().nullable(),
   description: z.string(),
   source: z.string(),
+  scope: z.string(),
 });
 
 const AnalysisEnvelopeSchema = z.object({
@@ -42,6 +43,8 @@ const AnalysisEnvelopeSchema = z.object({
     securityAnalysisStatus: z.string().nullable().optional(),
     gateReasons: z.array(z.string()).optional(),
     coverage: z.string().nullable().optional(),
+    evidenceVersion: z.number().nullable(),
+    evidenceStatus: z.enum(["VERIFIED", "LEGACY_UNVERIFIED"]),
   }),
 });
 

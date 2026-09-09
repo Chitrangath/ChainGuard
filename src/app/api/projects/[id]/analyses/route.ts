@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { analysisHistoryFilterSchema } from "@/lib/validation";
 import { handleApiError } from "@/lib/api-error";
+import { presentEvidence } from "@/lib/evidence";
 
 export async function GET(
   request: NextRequest,
@@ -65,6 +66,7 @@ export async function GET(
           completedAt: true,
           createdAt: true,
           _count: { select: { findings: true } },
+          evidenceVersion: true,
         },
       }),
       db.analysis.count({ where }),
@@ -74,8 +76,7 @@ export async function GET(
       analyses: analyses.map((a) => ({
         id: a.id,
         status: a.status,
-        riskScore: a.riskScore,
-        deploymentStatus: a.deploymentStatus,
+        ...presentEvidence(a.evidenceVersion, a.riskScore, a.deploymentStatus),
         compilationStatus: a.compilationStatus,
         testStatus: a.testStatus,
         totalTests: a.totalTests,

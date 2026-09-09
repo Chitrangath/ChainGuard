@@ -60,6 +60,8 @@ describe("analysis-cache", () => {
         completedAt: "2024-01-01T00:01:00.000Z",
         createdAt: "2024-01-01T00:00:00.000Z",
         findings: [],
+        evidenceVersion: 2,
+        evidenceStatus: "VERIFIED" as const,
       };
 
       const envelope = createEnvelope(data);
@@ -89,6 +91,8 @@ describe("analysis-cache", () => {
           completedAt: "2024-01-01T00:01:00.000Z",
           createdAt: "2024-01-01T00:00:00.000Z",
           findings: [],
+          evidenceVersion: 2,
+          evidenceStatus: "VERIFIED",
         },
       };
 
@@ -124,8 +128,8 @@ describe("analysis-cache", () => {
       expect(CACHE_TTL_SECONDS).toBe(300);
     });
 
-    it("VERSION is 2", () => {
-      expect(CACHE_VERSION).toBe(2);
+    it("VERSION is 3", () => {
+      expect(CACHE_VERSION).toBe(3);
     });
 
     it("KEY_PREFIX is analysis:", () => {

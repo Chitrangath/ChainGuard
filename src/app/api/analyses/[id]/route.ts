@@ -41,6 +41,7 @@ export async function GET(
       securityAnalysisStatus: analysis.securityAnalysisStatus,
       gateReasons: analysis.gateReasons,
       coverage: analysis.coverage,
+      evidenceStatus: analysis.evidenceStatus,
     });
   } catch (error) {
     return handleApiError(error);

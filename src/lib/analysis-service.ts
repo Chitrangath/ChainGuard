@@ -5,6 +5,7 @@ import {
   isTerminal,
   type CachedAnalysis,
 } from "./analysis-cache";
+import { presentEvidence, type EvidenceStatus } from "./evidence";
 
 export interface AnalysisResult {
   id: string;
@@ -29,6 +30,7 @@ export interface AnalysisResult {
   securityAnalysisStatus: string | null;
   gateReasons: string[];
   coverage: string | null;
+  evidenceStatus: EvidenceStatus;
 }
 
 export interface AnalysisDetailResult extends AnalysisResult {
@@ -41,6 +43,7 @@ export interface AnalysisDetailResult extends AnalysisResult {
     line: number | null;
     description: string;
     source: string;
+    scope: string;
   }>;
 }
 
@@ -67,16 +70,22 @@ function mapAnalysisToResult(
     securityAnalysisStatus?: string | null;
     gateReasons?: string[];
     coverage?: string | null;
+    evidenceVersion?: number | null;
     findings?: Array<{ id: string }>;
   },
   findingCount?: number,
 ): AnalysisResult {
+  const presented = presentEvidence(
+    analysis.evidenceVersion,
+    analysis.riskScore,
+    analysis.deploymentStatus,
+  );
   return {
     id: analysis.id,
     projectId: analysis.projectId,
     status: analysis.status,
-    riskScore: analysis.riskScore,
-    deploymentStatus: analysis.deploymentStatus,
+    riskScore: presented.riskScore,
+    deploymentStatus: presented.deploymentStatus,
     compilationStatus: analysis.compilationStatus,
     testStatus: analysis.testStatus,
     totalTests: analysis.totalTests,
@@ -94,6 +103,7 @@ function mapAnalysisToResult(
     securityAnalysisStatus: analysis.securityAnalysisStatus ?? null,
     gateReasons: analysis.gateReasons ?? [],
     coverage: analysis.coverage ?? null,
+    evidenceStatus: presented.evidenceStatus,
   };
 }
 
@@ -121,6 +131,7 @@ function cachedToResult(cached: CachedAnalysis): AnalysisResult {
     securityAnalysisStatus: cached.securityAnalysisStatus ?? null,
     gateReasons: cached.gateReasons ?? [],
     coverage: cached.coverage ?? null,
+    evidenceStatus: cached.evidenceStatus,
   };
 }
 
@@ -189,6 +200,7 @@ export async function getAnalysisWithFindings(
       line: f.line,
       description: f.description,
       source: f.source,
+      scope: f.scope,
     })),
   };
 
@@ -216,6 +228,8 @@ export async function getAnalysisWithFindings(
       securityAnalysisStatus: result.securityAnalysisStatus,
       gateReasons: result.gateReasons,
       coverage: result.coverage,
+      evidenceVersion: analysis.evidenceVersion,
+      evidenceStatus: result.evidenceStatus,
     };
     await setCachedAnalysis(analysisId, cacheData);
   }

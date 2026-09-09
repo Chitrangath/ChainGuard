@@ -24,6 +24,7 @@ interface ProjectData {
     riskScore: number | null;
     deploymentStatus: string | null;
     createdAt: Date;
+    evidenceStatus?: "VERIFIED" | "LEGACY_UNVERIFIED";
   }[];
 }
 
@@ -236,7 +237,9 @@ export function ProjectExplorer({ projects }: { projects: ProjectData[] }) {
                         <span className={lifecycleBadgeClass(lifecycle)}>{lifecycleLabel(lifecycle)}</span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        {lifecycle === "COMPLETED" && latest.riskScore != null ? (
+                        {latest?.evidenceStatus === "LEGACY_UNVERIFIED" ? (
+                          <span className="text-metadata">Legacy — rerun required</span>
+                        ) : lifecycle === "COMPLETED" && latest.riskScore != null ? (
                           <span className="text-code text-sm font-bold" style={{ color: riskColor(latest.riskScore) }}>
                             {latest.riskScore}
                           </span>
@@ -245,7 +248,7 @@ export function ProjectExplorer({ projects }: { projects: ProjectData[] }) {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {lifecycle === "COMPLETED" && deployment ? (
+                        {latest?.evidenceStatus !== "LEGACY_UNVERIFIED" && lifecycle === "COMPLETED" && deployment ? (
                           <span className={deploymentBadgeClass(deployment)}>{deploymentLabel(deployment)}</span>
                         ) : (
                           <span style={{ color: "var(--color-text-muted)" }}>—</span>
@@ -254,8 +257,8 @@ export function ProjectExplorer({ projects }: { projects: ProjectData[] }) {
                       <td className="px-4 py-3">
                         {hasAnalysis ? (
                           <span className="text-metadata whitespace-nowrap">{timeAgo(latest.createdAt)}</span>
-                        ) : (
-                          <span className="text-metadata">—</span>
+                  ) : (
+                    <span className="text-metadata">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -311,13 +314,15 @@ export function ProjectExplorer({ projects }: { projects: ProjectData[] }) {
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <span className={lifecycleBadgeClass(lifecycle)}>{lifecycleLabel(lifecycle)}</span>
 
-                  {lifecycle === "COMPLETED" && latest.riskScore != null && (
+                  {latest?.evidenceStatus === "LEGACY_UNVERIFIED" ? (
+                    <span className="text-metadata">Legacy — rerun required</span>
+                  ) : lifecycle === "COMPLETED" && latest.riskScore != null && (
                     <span className="text-code text-sm font-bold" style={{ color: riskColor(latest.riskScore) }}>
                       {latest.riskScore}/100
                     </span>
                   )}
 
-                  {lifecycle === "COMPLETED" && deployment && (
+                  {latest?.evidenceStatus !== "LEGACY_UNVERIFIED" && lifecycle === "COMPLETED" && deployment && (
                     <span className={deploymentBadgeClass(deployment)}>{deploymentLabel(deployment)}</span>
                   )}
                 </div>

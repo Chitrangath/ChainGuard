@@ -48,6 +48,7 @@ describe("analysis-service", () => {
         startedAt: new Date("2024-01-01T00:00:00Z"),
         completedAt: new Date("2024-01-01T00:01:00Z"),
         createdAt: new Date("2024-01-01T00:00:00Z"),
+        evidenceVersion: 2,
         findings: [{ id: "f1" }, { id: "f2" }],
       };
 
@@ -60,6 +61,36 @@ describe("analysis-service", () => {
       expect(result).not.toBeNull();
       expect(result?.id).toBe("test-id");
       expect(result?.findingCount).toBe(2);
+      expect(result?.evidenceStatus).toBe("VERIFIED");
+    });
+
+    it("qualifies legacy analysis and suppresses its historical score", async () => {
+      const { db } = await import("../db");
+      vi.mocked(db.analysis.findUnique).mockResolvedValue({
+        id: "legacy-id",
+        projectId: "proj-id",
+        status: "COMPLETED",
+        riskScore: 80,
+        deploymentStatus: "BLOCKED",
+        compilationStatus: "FAIL",
+        testStatus: "PASS",
+        totalTests: null,
+        passedTests: null,
+        failedTests: null,
+        startedAt: null,
+        completedAt: new Date("2024-01-01T00:01:00Z"),
+        createdAt: new Date("2024-01-01T00:00:00Z"),
+        evidenceVersion: null,
+        findings: [],
+      } as AnyAnalysis);
+
+      const { getAnalysisById } = await import("../analysis-service");
+      const result = await getAnalysisById("legacy-id");
+      expect(result).toMatchObject({
+        riskScore: null,
+        deploymentStatus: "BLOCKED",
+        evidenceStatus: "LEGACY_UNVERIFIED",
+      });
     });
 
     it("validates project ownership when projectId provided", async () => {
@@ -77,6 +108,7 @@ describe("analysis-service", () => {
         startedAt: new Date("2024-01-01T00:00:00Z"),
         completedAt: new Date("2024-01-01T00:01:00Z"),
         createdAt: new Date("2024-01-01T00:00:00Z"),
+        evidenceVersion: 2,
         findings: [],
       };
 
@@ -125,6 +157,7 @@ describe("analysis-service", () => {
             line: 42,
             description: "Reentrancy vulnerability",
             source: "slither",
+            scope: "FIRST_PARTY",
           },
         ],
       };

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { handleApiError } from "@/lib/api-error";
+import { CURRENT_EVIDENCE_VERSION } from "@/lib/evidence";
 
 export async function POST(
   _request: NextRequest,
@@ -25,6 +26,7 @@ export async function POST(
       data: {
         projectId: id,
         status: "QUEUED",
+        evidenceVersion: CURRENT_EVIDENCE_VERSION,
       },
     });
 
