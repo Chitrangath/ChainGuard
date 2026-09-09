@@ -165,6 +165,15 @@ describe("discoverSolidityFiles", () => {
     );
   });
 
+  it("detects multiple first-party Foundry roots for incomplete-policy handling", () => {
+    createFile("alpha/foundry.toml", "[profile.default]");
+    createFile("alpha/src/A.sol", "pragma solidity 0.8.20;");
+    createFile("beta/foundry.toml", "[profile.default]");
+    createFile("beta/src/B.sol", "pragma solidity 0.8.20;");
+    const result = discoverSolidityFiles(TEST_DIR);
+    expect(result.projectRoots).toEqual([path.join(TEST_DIR, "alpha"), path.join(TEST_DIR, "beta")]);
+  });
+
   it("handles total source size limit", () => {
     for (let i = 0; i < 20; i++) {
       createFile(`src/Contract${i}.sol`, "pragma solidity ^0.8.0;\n" + "x".repeat(10000));

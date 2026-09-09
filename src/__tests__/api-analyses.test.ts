@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   analysisHistoryFilterSchema,
   findingFilterSchema,
+  findingPaginationSchema,
 } from "../lib/validation";
 
 describe("API: Analysis history pagination", () => {
@@ -106,6 +107,11 @@ describe("API: Analysis history pagination", () => {
 });
 
 describe("API: Selected analysis detail", () => {
+  it("validates and caps finding pagination", () => {
+    expect(findingPaginationSchema.parse({ page: "2", pageSize: "25", severity: "HIGH" })).toEqual({ page: 2, pageSize: 25, severity: "HIGH" });
+    expect(findingPaginationSchema.safeParse({ pageSize: "51" }).success).toBe(false);
+    expect(findingPaginationSchema.safeParse({ page: "nope" }).success).toBe(false);
+  });
   describe("findingFilterSchema for severity filtering", () => {
     it("accepts empty filter", () => {
       const result = findingFilterSchema.safeParse({});

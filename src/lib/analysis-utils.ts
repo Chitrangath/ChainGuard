@@ -31,6 +31,7 @@ export interface AnalysisData {
   completedAt: string | null;
   createdAt: string;
   findings: FindingData[];
+  findingsPagination: { page: number; pageSize: number; total: number; totalPages: number; severity: string | null };
   projectType: string | null;
   compilerVersion: string | null;
   contractsDiscovered: number | null;
@@ -48,6 +49,11 @@ export interface AnalysisData {
   sourcesRejected?: number | null;
   discoveryReasons?: string[];
   failureReason?: string | null;
+  attemptCount?: number;
+  lastSafeReason?: string | null;
+  terminalReason?: string | null;
+  projectRootsDiscovered?: number | null;
+  projectRootsAnalyzed?: number | null;
 }
 
 export interface AnalysisSummaryData {

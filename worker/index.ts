@@ -1,9 +1,14 @@
 import "dotenv/config";
 import { getDb, closeDb } from "./db";
 import { runAnalysis, type AnalysisContext } from "./analyzer";
+import { failureTransition, staleTransition } from "./job-lifecycle";
+import { runBoundedProcess } from "./process-runner";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 const POLL_INTERVAL_MS = 3000;
-const STALE_THRESHOLD_MS = 5 * 60 * 1000; // 5 minutes
+const STALE_THRESHOLD_MS = 7 * 60 * 1000; // overall timeout plus cleanup grace
+const WORKSPACE_BASE = "/tmp/guardrails";
 
 let running = true;
 
@@ -18,9 +23,10 @@ async function claimJob() {
   // Atomic claim: find one QUEUED job and atomically set it to RUNNING.
   // Uses a transaction with FOR UPDATE SKIP LOCKED to prevent double-claims.
   const result = await db.$transaction(async (tx) => {
-    const rows = await tx.$queryRawUnsafe<{ id: string; projectId: string }[]>(
-      `SELECT id, "projectId" FROM analyses
+    const rows = await tx.$queryRawUnsafe<{ id: string; projectId: string; attemptCount: number }[]>(
+      `SELECT id, "projectId", "attemptCount" FROM analyses
        WHERE status = 'QUEUED'
+         AND ("nextAttemptAt" IS NULL OR "nextAttemptAt" <= NOW())
        ORDER BY "createdAt" ASC
        LIMIT 1
        FOR UPDATE SKIP LOCKED`,
@@ -35,16 +41,19 @@ async function claimJob() {
       data: {
         status: "RUNNING",
         startedAt: new Date(),
+        lastAttemptAt: new Date(),
+        nextAttemptAt: null,
+        attemptCount: { increment: 1 },
       },
     });
 
-    return { id: job.id, projectId: job.projectId };
+    return { id: job.id, projectId: job.projectId, attemptCount: job.attemptCount + 1 };
   });
 
   return result;
 }
 
-async function processJob(job: { id: string; projectId: string }) {
+async function processJob(job: { id: string; projectId: string; attemptCount: number }) {
   const db = getDb();
 
   log(`Processing analysis ${job.id} for project ${job.projectId}`);
@@ -73,15 +82,7 @@ async function processJob(job: { id: string; projectId: string }) {
     } else {
       await db.analysis.update({
         where: { id: job.id },
-        data: {
-          status: "FAILED",
-          riskScore: null,
-          deploymentStatus: "BLOCKED",
-          coverage: "FAILED",
-          gateReasons: ["INCOMPLETE_ANALYSIS"],
-          failureReason: "ANALYSIS_EXECUTION_FAILED",
-          completedAt: new Date(),
-        },
+        data: failureTransition(result.error ?? "ANALYSIS_EXECUTION_FAILED", job.attemptCount, new Date()),
       });
       log(`Analysis ${job.id} infrastructure failure: ${result.error}`);
     }
@@ -92,15 +93,7 @@ async function processJob(job: { id: string; projectId: string }) {
     try {
       await db.analysis.update({
         where: { id: job.id },
-        data: {
-          status: "FAILED",
-          riskScore: null,
-          deploymentStatus: "BLOCKED",
-          coverage: "FAILED",
-          gateReasons: ["INCOMPLETE_ANALYSIS"],
-          failureReason: "ANALYSIS_EXECUTION_FAILED",
-          completedAt: new Date(),
-        },
+        data: failureTransition("ANALYSIS_EXECUTION_FAILED", job.attemptCount, new Date()),
       });
     } catch (updateError) {
       log(`Failed to mark analysis ${job.id} as FAILED: ${updateError}`);
@@ -114,24 +107,30 @@ async function checkStaleJobs() {
   try {
     const staleThreshold = new Date(Date.now() - STALE_THRESHOLD_MS);
 
-    const staleCount = await db.analysis.updateMany({
+    const staleJobs = await db.analysis.findMany({
       where: {
         status: "RUNNING",
         startedAt: { lt: staleThreshold },
       },
-      data: {
-        status: "FAILED",
-        riskScore: null,
-        deploymentStatus: "BLOCKED",
-        coverage: "FAILED",
-        gateReasons: ["INCOMPLETE_ANALYSIS"],
-        failureReason: "ANALYSIS_TIMEOUT",
-        completedAt: new Date(),
-      },
+      select: { id: true, attemptCount: true },
     });
-
-    if (staleCount.count > 0) {
-      log(`Marked ${staleCount.count} stale RUNNING job(s) as FAILED`);
+    let recovered = 0;
+    for (const job of staleJobs) {
+      const safeId = path.basename(job.id).replace(/[^a-zA-Z0-9_.-]/g, "");
+      if (safeId !== job.id) continue;
+      await runBoundedProcess("docker", ["rm", "-f", `chainguard-${safeId}-analysis`], { timeoutMs: 10_000 });
+      const workspace = path.join(WORKSPACE_BASE, safeId);
+      if (workspace.startsWith(`${WORKSPACE_BASE}${path.sep}`)) {
+        fs.rmSync(workspace, { recursive: true, force: true });
+      }
+      const result = await db.analysis.updateMany({
+        where: { id: job.id, status: "RUNNING" },
+        data: staleTransition(job.attemptCount, new Date()),
+      });
+      recovered += result.count;
+    }
+    if (recovered > 0) {
+      log(`Recovered ${recovered} stale RUNNING job(s)`);
     }
   } catch (error) {
     log(`Error checking stale jobs: ${error}`);

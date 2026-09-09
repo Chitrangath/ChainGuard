@@ -128,8 +128,8 @@ describe("analysis-cache", () => {
       expect(CACHE_TTL_SECONDS).toBe(300);
     });
 
-    it("VERSION is 4", () => {
-      expect(CACHE_VERSION).toBe(4);
+    it("VERSION is 5", () => {
+      expect(CACHE_VERSION).toBe(5);
     });
 
     it("KEY_PREFIX is analysis:", () => {

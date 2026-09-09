@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { handleApiError } from "@/lib/api-error";
-import { CURRENT_EVIDENCE_VERSION } from "@/lib/evidence";
+import { enqueueAnalysis } from "@/lib/analysis-queue";
 
 export async function POST(
   _request: NextRequest,
@@ -10,32 +10,24 @@ export async function POST(
   try {
     const { id } = await params;
 
-    const project = await db.project.findUnique({
-      where: { id },
-      select: { id: true },
-    });
-
-    if (!project) {
+    const result = await enqueueAnalysis(db, id);
+    if (result.kind === "missing") {
       return NextResponse.json(
         { error: "Project not found" },
         { status: 404 },
       );
     }
-
-    const analysis = await db.analysis.create({
-      data: {
-        projectId: id,
-        status: "QUEUED",
-        evidenceVersion: CURRENT_EVIDENCE_VERSION,
-      },
-    });
+    if (result.kind === "capacity") {
+      return NextResponse.json({ error: "Analysis capacity reached. Try again later." }, { status: 429 });
+    }
 
     return NextResponse.json(
       {
-        analysisId: analysis.id,
-        status: analysis.status,
+        analysisId: result.analysis.id,
+        status: result.analysis.status,
+        reused: result.kind === "existing",
       },
-      { status: 201 },
+      { status: result.kind === "created" ? 201 : 200 },
     );
   } catch (error) {
     return handleApiError(error);

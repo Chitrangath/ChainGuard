@@ -111,7 +111,14 @@ export function AnalysisView({
         <>
           <AnalysisSummary analysis={selectedAnalysis} />
           {selectedAnalysis.evidenceStatus === "VERIFIED" && (
-            <FindingExplorer findings={selectedAnalysis.findings} analysisStatus={selectedAnalysis.status} securityAnalysisStatus={selectedAnalysis.securityAnalysisStatus} />
+            <FindingExplorer
+              projectId={project.id}
+              analysisId={selectedAnalysis.id}
+              findings={selectedAnalysis.findings}
+              pagination={selectedAnalysis.findingsPagination}
+              analysisStatus={selectedAnalysis.status}
+              securityAnalysisStatus={selectedAnalysis.securityAnalysisStatus}
+            />
           )}
         </>
       ) : activeAnalysis ? (

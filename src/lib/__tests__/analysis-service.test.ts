@@ -6,6 +6,10 @@ vi.mock("../db", () => ({
       findUnique: vi.fn(),
       findFirst: vi.fn(),
     },
+    finding: {
+      findMany: vi.fn(),
+      count: vi.fn(),
+    },
   },
 }));
 
@@ -168,6 +172,8 @@ describe("analysis-service", () => {
 
       const { db } = await import("../db");
       vi.mocked(db.analysis.findFirst).mockResolvedValue(mockAnalysis as AnyAnalysis);
+      vi.mocked(db.finding.findMany).mockResolvedValue(mockAnalysis.findings as AnyAnalysis);
+      vi.mocked(db.finding.count).mockResolvedValue(1);
 
       const { getAnalysisWithFindings } = await import("../analysis-service");
       const result = await getAnalysisWithFindings("test-id", "proj-id");
@@ -175,6 +181,7 @@ describe("analysis-service", () => {
       expect(result).not.toBeNull();
       expect(result?.findings).toHaveLength(1);
       expect(result?.findings[0].severity).toBe("CRITICAL");
+      expect(result?.findingsPagination).toEqual({ page: 1, pageSize: 25, total: 1, totalPages: 1, severity: null });
     });
   });
 });

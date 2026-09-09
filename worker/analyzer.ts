@@ -17,6 +17,8 @@ import type {
   GateReason,
 } from "./types";
 import { runBoundedProcess, type ProcessResult } from "./process-runner";
+import { isRetryableReason } from "./retry-policy";
+import { selectSingleProjectRoot } from "./project-root-policy";
 
 const WORKSPACE_BASE = "/tmp/guardrails";
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
@@ -155,7 +157,7 @@ async function gitClone(
     ["clone", "--depth", "1", url, path.join(dest, "repo")],
     { timeout: CLONE_TIMEOUT_MS, signal },
   );
-  return { exitCode: result.exitCode, stderr: result.stderr };
+  return { exitCode: result.exitCode, stderr: result.reasonCode ?? (result.exitCode === 0 ? "" : "CLONE_FAILED") };
 }
 
 async function initSubmodules(
@@ -192,9 +194,10 @@ function selectTarget(
   projectType: ProjectType,
   discovery: ReturnType<typeof discoverSolidityFiles>,
   repoDir: string,
+  selectedRoot: string | null,
 ): { targetRoot: string; sourcePaths: string[] } {
   if (projectType === "FOUNDRY") {
-    for (const root of discovery.projectRoots) {
+    for (const root of selectedRoot ? [selectedRoot] : []) {
       if (fs.existsSync(path.join(root, "foundry.toml"))) {
         const srcDir = path.join(root, "src");
         const testDir = path.join(root, "test");
@@ -301,13 +304,13 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
 
   try {
     if (!validateUrl(ctx.repositoryUrl)) {
-      throw new Error("Invalid repository URL");
+      throw new Error("INVALID_REPOSITORY_URL");
     }
 
     const cloneResult = await gitClone(ctx.repositoryUrl, wsDir, controller.signal);
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
     if (cloneResult.exitCode !== 0) {
-      throw new Error(`Clone failed: ${cloneResult.stderr}`);
+      throw new Error(cloneResult.stderr);
     }
 
     const submodules = await initSubmodules(repoDir, ctx.repositoryUrl, controller.signal);
@@ -323,7 +326,6 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       return { success: true };
     }
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
-
     await db.analysis.update({
       where: { id: ctx.analysisId },
       data: { status: "RUNNING", startedAt: new Date() },
@@ -331,7 +333,8 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
 
     const discovery = discoverSolidityFiles(repoDir);
     const projectType = classifyProject(repoDir, discovery);
-    const { targetRoot, sourcePaths } = selectTarget(projectType, discovery, repoDir);
+    const rootPolicy = selectSingleProjectRoot(discovery.projectRoots);
+    const { targetRoot, sourcePaths } = selectTarget(projectType, discovery, repoDir, rootPolicy.selectedRoot);
     const incompleteFirstPartyDiscovery = discovery.rejected.some((item) => item.scope === "FIRST_PARTY");
     const discoveryEvidence = {
       firstPartySourcesDiscovered: discovery.firstPartyContracts.length,
@@ -339,7 +342,9 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       generatedSourcesDiscovered: discovery.generatedContracts.length,
       firstPartySourcesTargeted: sourcePaths.length,
       sourcesRejected: discovery.rejected.length,
-      discoveryReasons: discovery.reasonCodes,
+      discoveryReasons: [...discovery.reasonCodes, ...(rootPolicy.reason ? [rootPolicy.reason] : [])],
+      projectRootsDiscovered: rootPolicy.rootsDiscovered,
+      projectRootsAnalyzed: rootPolicy.rootsAnalyzed,
     };
 
     if (sourcePaths.length === 0) {
@@ -403,6 +408,9 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       );
     }
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
+    if (compilation.status !== "PASS" && isRetryableReason(compilation.reasonCode)) {
+      throw new Error(compilation.reasonCode);
+    }
 
     let tests: TestResult;
     if (compilation.status !== "PASS") {
@@ -425,6 +433,9 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       tests = { status: "NO_TESTS", reasonCode: "NO_TEST_FRAMEWORK" };
     }
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
+    if (tests.status === "ERROR" && isRetryableReason(tests.reasonCode)) {
+      throw new Error(tests.reasonCode);
+    }
 
     const contractsTargeted = compilation.status === "PASS" ? compilation.contractsCompiled : sourcePaths.length;
 
@@ -435,6 +446,9 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       staticAnalysis = await runSlither(targetRoot, wsDir, outputDir, compilerSelection.version, contractsTargeted, controller.signal);
     }
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
+    if (staticAnalysis.status !== "PASS" && isRetryableReason(staticAnalysis.reasonCode)) {
+      throw new Error(staticAnalysis.reasonCode);
+    }
 
     const securityAnalysisStatus = staticAnalysis.status === "PASS" ? "PASS" :
       staticAnalysis.status === "FAIL" ? "FAIL" : "NOT_RUN";
@@ -447,6 +461,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       coverage = "FAILED";
     }
     if (incompleteFirstPartyDiscovery && coverage === "FULL") coverage = "PARTIAL";
+    if (rootPolicy.incomplete && coverage === "FULL") coverage = "PARTIAL";
 
     const severityCounts: Record<Severity, number> = {
       CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0,
@@ -522,23 +537,13 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     return { success: true };
   } catch (error) {
     if (controller.signal.aborted) {
-      await db.analysis.update({ where: { id: ctx.analysisId }, data: {
-        status: "FAILED", riskScore: null, deploymentStatus: "BLOCKED", coverage: "FAILED",
-        gateReasons: ["INCOMPLETE_ANALYSIS"], failureReason: "ANALYSIS_TIMEOUT",
-        evidenceVersion: 2, completedAt: new Date(),
-      }});
-      return { success: true };
+      return { success: false, error: "ANALYSIS_TIMEOUT" };
     }
     const msg = error instanceof Error ? error.message : String(error);
-    if (msg === "Invalid repository URL") return { success: false, error: msg };
+    if (msg === "INVALID_REPOSITORY_URL" || isRetryableReason(msg)) return { success: false, error: msg };
     const safeReason = (["TIMEOUT", "OUTPUT_LIMIT", "ABORTED", "SPAWN_FAILED"] as const)
       .find((reason) => msg.includes(reason)) ?? "ANALYSIS_EXECUTION_FAILED";
-    await db.analysis.update({ where: { id: ctx.analysisId }, data: {
-      status: "FAILED", riskScore: null, deploymentStatus: "BLOCKED", coverage: "FAILED",
-      gateReasons: ["INCOMPLETE_ANALYSIS"], failureReason: safeReason,
-      evidenceVersion: 2, completedAt: new Date(),
-    }});
-    return { success: true };
+    return { success: false, error: safeReason };
   } finally {
     clearTimeout(overallTimer);
     cleanup(wsDir);

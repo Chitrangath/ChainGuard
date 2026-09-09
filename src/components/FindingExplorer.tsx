@@ -1,14 +1,16 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { findingFilterSchema } from "@/lib/validation";
 import { ChevronIcon } from "./icons";
 import { SeverityBadge } from "./Badge";
-import { countBySeverity, sortFindingsBySeverity } from "@/lib/analysis-utils";
+import { sortFindingsBySeverity } from "@/lib/analysis-utils";
 import type { FindingData } from "@/lib/analysis-utils";
 
 interface FindingExplorerProps {
+  projectId: string;
+  analysisId: string;
   findings: FindingData[];
+  pagination: { page: number; pageSize: number; total: number; totalPages: number; severity: string | null };
   analysisStatus: string;
   securityAnalysisStatus?: string | null;
 }
@@ -22,22 +24,43 @@ const SEVERITY_FILTERS = [
 ] as const;
 
 export function FindingExplorer({
+  projectId,
+  analysisId,
   findings,
+  pagination,
   analysisStatus,
   securityAnalysisStatus,
 }: FindingExplorerProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [severityFilter, setSeverityFilter] = useState("ALL");
-
-  const severityCounts = useMemo(() => countBySeverity(findings), [findings]);
+  const [serverFindings, setServerFindings] = useState(findings);
+  const [pageData, setPageData] = useState(pagination);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const filteredFindings = useMemo(() => {
-    const sorted = sortFindingsBySeverity(findings);
-    if (severityFilter === "ALL") return sorted;
-    const result = findingFilterSchema.safeParse({ severity: severityFilter });
-    if (!result.success) return sorted;
-    return sorted.filter((f) => f.severity === result.data.severity);
-  }, [findings, severityFilter]);
+    return sortFindingsBySeverity(serverFindings);
+  }, [serverFindings]);
+
+  const fetchPage = async (page: number, severity: string) => {
+    setLoading(true);
+    setLoadError(false);
+    const query = new URLSearchParams({ page: String(page), pageSize: String(pageData.pageSize) });
+    if (severity !== "ALL") query.set("severity", severity);
+    try {
+      const response = await fetch(`/api/projects/${projectId}/analyses/${analysisId}?${query}`);
+      if (!response.ok) throw new Error("request failed");
+      const data = await response.json();
+      setServerFindings(data.findings);
+      setPageData(data.findingsPagination);
+      setSeverityFilter(severity);
+      setExpandedId(null);
+    } catch {
+      setLoadError(true);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const toggleExpanded = (id: string) => {
     setExpandedId(expandedId === id ? null : id);
@@ -54,7 +77,7 @@ export function FindingExplorer({
     );
   }
 
-  if (findings.length === 0) {
+  if (pageData.total === 0 && severityFilter === "ALL") {
     const scanRan = securityAnalysisStatus === "PASS";
     return (
       <div className="mt-8">
@@ -87,33 +110,23 @@ export function FindingExplorer({
       >
         {SEVERITY_FILTERS.map((filter) => {
           const isActive = severityFilter === filter.value;
-          const count =
-            filter.value === "ALL"
-              ? findings.length
-              : severityCounts[filter.value as keyof typeof severityCounts];
           return (
             <button
               key={filter.value}
-              onClick={() => setSeverityFilter(filter.value)}
+              onClick={() => fetchPage(1, filter.value)}
               aria-pressed={isActive}
               className={`filter-pill focus-ring ${isActive ? "filter-pill-active" : ""}`}
             >
               {filter.label}
-              <span
-                className="rounded-full px-1.5 py-0.5 text-[10px] font-semibold"
-                style={{
-                  background: isActive
-                    ? "rgba(255,255,255,0.2)"
-                    : "var(--color-surface-sunken)",
-                  color: isActive ? "inherit" : "var(--color-text-muted)",
-                }}
-              >
-                {count}
-              </span>
             </button>
           );
         })}
       </div>
+
+      <p className="mt-3 text-metadata" aria-live="polite">
+        {loading ? "Loading findings…" : pageData.total === 0 ? "No findings on this filtered page." : `Showing ${(pageData.page - 1) * pageData.pageSize + 1}–${Math.min(pageData.page * pageData.pageSize, pageData.total)} of ${pageData.total} findings`}
+      </p>
+      {loadError && <p className="mt-2 text-metadata" role="alert">Unable to load findings. The current page remains displayed.</p>}
 
       {/* Findings Table */}
       {filteredFindings.length === 0 ? (
@@ -168,6 +181,13 @@ export function FindingExplorer({
               })}
             </tbody>
           </table>
+        </div>
+      )}
+      {pageData.totalPages > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <button className="btn btn-secondary btn-sm" disabled={loading || pageData.page <= 1} onClick={() => fetchPage(pageData.page - 1, severityFilter)}>Previous</button>
+          <span className="text-metadata">Page {pageData.page} of {pageData.totalPages}</span>
+          <button className="btn btn-secondary btn-sm" disabled={loading || pageData.page >= pageData.totalPages} onClick={() => fetchPage(pageData.page + 1, severityFilter)}>Next</button>
         </div>
       )}
     </div>

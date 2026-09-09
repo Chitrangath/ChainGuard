@@ -243,6 +243,12 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
             {analysis.failureReason && (
               <div className="text-metadata">Failure reason: {analysis.failureReason}</div>
             )}
+            {(analysis.attemptCount ?? 0) > 0 && (
+              <div className="text-metadata">Attempts: {analysis.attemptCount}/3</div>
+            )}
+            {(analysis.projectRootsDiscovered ?? 0) > 0 && (
+              <div className="text-metadata">Project roots: {analysis.projectRootsAnalyzed ?? 0} of {analysis.projectRootsDiscovered} analyzed</div>
+            )}
             <div className="text-metadata">
               {formatTimestamp(analysis.completedAt ?? analysis.createdAt)}
             </div>

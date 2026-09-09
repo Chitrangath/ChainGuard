@@ -1,7 +1,6 @@
 import { db } from "./db";
 import {
   getCachedAnalysis,
-  setCachedAnalysis,
   isTerminal,
   type CachedAnalysis,
 } from "./analysis-cache";
@@ -39,6 +38,13 @@ export interface AnalysisResult {
   sourcesRejected: number | null;
   discoveryReasons: string[];
   failureReason: string | null;
+  attemptCount: number;
+  lastAttemptAt: string | null;
+  nextAttemptAt: string | null;
+  lastSafeReason: string | null;
+  terminalReason: string | null;
+  projectRootsDiscovered: number | null;
+  projectRootsAnalyzed: number | null;
 }
 
 export interface AnalysisDetailResult extends AnalysisResult {
@@ -53,6 +59,7 @@ export interface AnalysisDetailResult extends AnalysisResult {
     source: string;
     scope: string;
   }>;
+  findingsPagination: { page: number; pageSize: number; total: number; totalPages: number; severity: string | null };
 }
 
 function mapAnalysisToResult(
@@ -87,7 +94,15 @@ function mapAnalysisToResult(
     sourcesRejected?: number | null;
     discoveryReasons?: string[];
     failureReason?: string | null;
+    attemptCount?: number;
+    lastAttemptAt?: Date | null;
+    nextAttemptAt?: Date | null;
+    lastSafeReason?: string | null;
+    terminalReason?: string | null;
+    projectRootsDiscovered?: number | null;
+    projectRootsAnalyzed?: number | null;
     findings?: Array<{ id: string }>;
+    _count?: { findings: number };
   },
   findingCount?: number,
 ): AnalysisResult {
@@ -111,7 +126,7 @@ function mapAnalysisToResult(
     startedAt: analysis.startedAt?.toISOString() ?? null,
     completedAt: analysis.completedAt?.toISOString() ?? null,
     createdAt: analysis.createdAt.toISOString(),
-    findingCount: findingCount ?? analysis.findings?.length ?? 0,
+    findingCount: findingCount ?? analysis._count?.findings ?? analysis.findings?.length ?? 0,
     projectType: legacy ? null : analysis.projectType ?? null,
     compilerVersion: legacy ? null : analysis.compilerVersion ?? null,
     contractsDiscovered: legacy ? null : analysis.contractsDiscovered ?? null,
@@ -129,6 +144,13 @@ function mapAnalysisToResult(
     sourcesRejected: analysis.sourcesRejected ?? null,
     discoveryReasons: analysis.discoveryReasons ?? [],
     failureReason: analysis.failureReason ?? null,
+    attemptCount: analysis.attemptCount ?? 0,
+    lastAttemptAt: analysis.lastAttemptAt?.toISOString() ?? null,
+    nextAttemptAt: analysis.nextAttemptAt?.toISOString() ?? null,
+    lastSafeReason: analysis.lastSafeReason ?? null,
+    terminalReason: analysis.terminalReason ?? null,
+    projectRootsDiscovered: analysis.projectRootsDiscovered ?? null,
+    projectRootsAnalyzed: analysis.projectRootsAnalyzed ?? null,
   };
 }
 
@@ -166,13 +188,13 @@ function cachedToResult(cached: CachedAnalysis): AnalysisResult {
     sourcesRejected: cached.sourcesRejected ?? null,
     discoveryReasons: cached.discoveryReasons ?? [],
     failureReason: cached.failureReason ?? null,
-  };
-}
-
-function cachedToDetail(cached: CachedAnalysis): AnalysisDetailResult {
-  return {
-    ...cachedToResult(cached),
-    findings: cached.findings,
+    attemptCount: cached.attemptCount ?? 0,
+    lastAttemptAt: cached.lastAttemptAt ?? null,
+    nextAttemptAt: cached.nextAttemptAt ?? null,
+    lastSafeReason: cached.lastSafeReason ?? null,
+    terminalReason: cached.terminalReason ?? null,
+    projectRootsDiscovered: cached.projectRootsDiscovered ?? null,
+    projectRootsAnalyzed: cached.projectRootsAnalyzed ?? null,
   };
 }
 
@@ -188,7 +210,7 @@ export async function getAnalysisById(
 
   const analysis = await db.analysis.findUnique({
     where: { id: analysisId },
-    include: { findings: { select: { id: true } } },
+    include: { _count: { select: { findings: true } } },
   });
 
   if (!analysis) return null;
@@ -200,32 +222,29 @@ export async function getAnalysisById(
 export async function getAnalysisWithFindings(
   analysisId: string,
   projectId: string,
+  options: { page?: number; pageSize?: number; severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" } = {},
 ): Promise<AnalysisDetailResult | null> {
-  const cached = await getCachedAnalysis(analysisId);
-  if (cached && isTerminal(cached.status)) {
-    if (cached.projectId !== projectId) return null;
-    return cachedToDetail(cached);
-  }
-
   const analysis = await db.analysis.findFirst({
     where: { id: analysisId, projectId },
-    include: {
-      findings: {
-        orderBy: [
-          { severity: "asc" },
-          { file: "asc" },
-          { line: "asc" },
-          { id: "asc" },
-        ],
-      },
-    },
   });
 
   if (!analysis) return null;
+  const page = options.page ?? 1;
+  const pageSize = options.pageSize ?? 25;
+  const findingWhere = { analysisId, ...(options.severity ? { severity: options.severity } : {}) };
+  const [findings, total] = await Promise.all([
+    db.finding.findMany({
+      where: findingWhere,
+      orderBy: [{ severity: "asc" }, { file: "asc" }, { line: "asc" }, { id: "asc" }],
+      skip: (page - 1) * pageSize,
+      take: pageSize,
+    }),
+    db.finding.count({ where: findingWhere }),
+  ]);
 
   const result: AnalysisDetailResult = {
-    ...mapAnalysisToResult(analysis),
-    findings: analysis.findings.map((f) => ({
+    ...mapAnalysisToResult(analysis, total),
+    findings: findings.map((f) => ({
       id: f.id,
       severity: f.severity,
       type: f.type,
@@ -236,45 +255,7 @@ export async function getAnalysisWithFindings(
       source: f.source,
       scope: f.scope,
     })),
+    findingsPagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize), severity: options.severity ?? null },
   };
-
-  if (isTerminal(analysis.status)) {
-    const cacheData: CachedAnalysis = {
-      id: result.id,
-      projectId: result.projectId,
-      status: result.status,
-      riskScore: result.riskScore,
-      deploymentStatus: result.deploymentStatus,
-      compilationStatus: result.compilationStatus,
-      testStatus: result.testStatus,
-      totalTests: result.totalTests,
-      passedTests: result.passedTests,
-      failedTests: result.failedTests,
-      startedAt: result.startedAt,
-      completedAt: result.completedAt,
-      createdAt: result.createdAt,
-      findings: result.findings,
-      projectType: result.projectType,
-      compilerVersion: result.compilerVersion,
-      contractsDiscovered: result.contractsDiscovered,
-      contractsCompiled: result.contractsCompiled,
-      contractsTargetedForScan: result.contractsTargetedForScan,
-      securityAnalysisStatus: result.securityAnalysisStatus,
-      gateReasons: result.gateReasons,
-      coverage: result.coverage,
-      evidenceVersion: analysis.evidenceVersion,
-      evidenceStatus: result.evidenceStatus,
-      firstPartySourcesDiscovered: result.firstPartySourcesDiscovered,
-      dependencySourcesDiscovered: result.dependencySourcesDiscovered,
-      generatedSourcesDiscovered: result.generatedSourcesDiscovered,
-      firstPartySourcesTargeted: result.firstPartySourcesTargeted,
-      filesScanned: result.filesScanned,
-      sourcesRejected: result.sourcesRejected,
-      discoveryReasons: result.discoveryReasons,
-      failureReason: result.failureReason,
-    };
-    await setCachedAnalysis(analysisId, cacheData);
-  }
-
   return result;
 }

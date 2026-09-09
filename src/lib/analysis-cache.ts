@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getRedisClient } from "./redis";
 
 const CACHE_TTL_SECONDS = 300;
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 const KEY_PREFIX = "analysis:";
 
 const FindingSchema = z.object({
@@ -53,6 +53,13 @@ const AnalysisEnvelopeSchema = z.object({
     sourcesRejected: z.number().nullable().optional(),
     discoveryReasons: z.array(z.string()).optional(),
     failureReason: z.string().nullable().optional(),
+    attemptCount: z.number().int().nonnegative().optional(),
+    lastAttemptAt: z.string().nullable().optional(),
+    nextAttemptAt: z.string().nullable().optional(),
+    lastSafeReason: z.string().nullable().optional(),
+    terminalReason: z.string().nullable().optional(),
+    projectRootsDiscovered: z.number().int().nonnegative().nullable().optional(),
+    projectRootsAnalyzed: z.number().int().nonnegative().nullable().optional(),
   }),
 });
 

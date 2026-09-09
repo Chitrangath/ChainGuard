@@ -94,7 +94,7 @@ describe("runAnalysis", () => {
       repositoryUrl: "not-a-valid-url",
     });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Invalid repository URL");
+    expect(result.error).toBe("INVALID_REPOSITORY_URL");
   });
 
   it("rejects non-GitHub URLs", async () => {
@@ -103,7 +103,7 @@ describe("runAnalysis", () => {
       repositoryUrl: "https://gitlab.com/some/repo",
     });
     expect(result.success).toBe(false);
-    expect(result.error).toContain("Invalid repository URL");
+    expect(result.error).toBe("INVALID_REPOSITORY_URL");
   });
 
   it("returns AnalysisResult type", async () => {

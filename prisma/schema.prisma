@@ -52,7 +52,15 @@ model Analysis {
   sourcesRejected         Int?
   discoveryReasons        String[]
   failureReason           String?
+  attemptCount            Int                      @default(0)
+  lastAttemptAt           DateTime?
+  nextAttemptAt           DateTime?
+  lastSafeReason          String?
+  terminalReason          String?
+  projectRootsDiscovered  Int?
+  projectRootsAnalyzed    Int?
 
+  @@index([status, nextAttemptAt, createdAt])
   @@map("analyses")
 }
 

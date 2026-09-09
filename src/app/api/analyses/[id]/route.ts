@@ -50,6 +50,13 @@ export async function GET(
       sourcesRejected: analysis.sourcesRejected,
       discoveryReasons: analysis.discoveryReasons,
       failureReason: analysis.failureReason,
+      attemptCount: analysis.attemptCount,
+      lastAttemptAt: analysis.lastAttemptAt,
+      nextAttemptAt: analysis.nextAttemptAt,
+      lastSafeReason: analysis.lastSafeReason,
+      terminalReason: analysis.terminalReason,
+      projectRootsDiscovered: analysis.projectRootsDiscovered,
+      projectRootsAnalyzed: analysis.projectRootsAnalyzed,
     });
   } catch (error) {
     return handleApiError(error);

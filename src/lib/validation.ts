@@ -30,4 +30,10 @@ export const findingFilterSchema = z.object({
   severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
 });
 
+export const findingPaginationSchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(50).default(25),
+  severity: z.enum(["CRITICAL", "HIGH", "MEDIUM", "LOW"]).optional(),
+});
+
 export type FindingFilterInput = z.infer<typeof findingFilterSchema>;

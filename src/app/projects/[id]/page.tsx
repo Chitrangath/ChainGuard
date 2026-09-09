@@ -129,6 +129,7 @@ export default async function ProjectPage({
       source: string;
       scope: string;
     }>;
+    findingsPagination: { page: number; pageSize: number; total: number; totalPages: number; severity: string | null };
     projectType: string | null;
     compilerVersion: string | null;
     contractsDiscovered: number | null;
@@ -146,6 +147,11 @@ export default async function ProjectPage({
     sourcesRejected?: number | null;
     discoveryReasons?: string[];
     failureReason?: string | null;
+    attemptCount?: number;
+    lastSafeReason?: string | null;
+    terminalReason?: string | null;
+    projectRootsDiscovered?: number | null;
+    projectRootsAnalyzed?: number | null;
   } | null = null;
 
   if (analysisId) {
@@ -159,7 +165,9 @@ export default async function ProjectPage({
             { line: "asc" },
             { id: "asc" },
           ],
+          take: 25,
         },
+        _count: { select: { findings: true } },
       },
     });
 
@@ -189,6 +197,7 @@ export default async function ProjectPage({
           source: f.source,
           scope: f.scope,
         })),
+        findingsPagination: { page: 1, pageSize: 25, total: selRaw._count.findings, totalPages: Math.ceil(selRaw._count.findings / 25), severity: null },
         projectType: selRaw.projectType ?? null,
         compilerVersion: selRaw.compilerVersion ?? null,
         contractsDiscovered: selRaw.contractsDiscovered ?? null,
@@ -206,6 +215,11 @@ export default async function ProjectPage({
         sourcesRejected: selRaw.sourcesRejected,
         discoveryReasons: selRaw.discoveryReasons,
         failureReason: selRaw.failureReason,
+        attemptCount: selRaw.attemptCount,
+        lastSafeReason: selRaw.lastSafeReason,
+        terminalReason: selRaw.terminalReason,
+        projectRootsDiscovered: selRaw.projectRootsDiscovered,
+        projectRootsAnalyzed: selRaw.projectRootsAnalyzed,
       };
     }
   }
@@ -225,7 +239,9 @@ export default async function ProjectPage({
               { line: "asc" },
               { id: "asc" },
             ],
+            take: 25,
           },
+          _count: { select: { findings: true } },
         },
       });
 
@@ -255,6 +271,7 @@ export default async function ProjectPage({
             source: f.source,
             scope: f.scope,
           })),
+          findingsPagination: { page: 1, pageSize: 25, total: latestWithFindings._count.findings, totalPages: Math.ceil(latestWithFindings._count.findings / 25), severity: null },
           projectType: latestWithFindings.projectType ?? null,
           compilerVersion: latestWithFindings.compilerVersion ?? null,
           contractsDiscovered: latestWithFindings.contractsDiscovered ?? null,
@@ -272,6 +289,11 @@ export default async function ProjectPage({
           sourcesRejected: latestWithFindings.sourcesRejected,
           discoveryReasons: latestWithFindings.discoveryReasons,
           failureReason: latestWithFindings.failureReason,
+          attemptCount: latestWithFindings.attemptCount,
+          lastSafeReason: latestWithFindings.lastSafeReason,
+          terminalReason: latestWithFindings.terminalReason,
+          projectRootsDiscovered: latestWithFindings.projectRootsDiscovered,
+          projectRootsAnalyzed: latestWithFindings.projectRootsAnalyzed,
         };
       }
     } else {
@@ -290,6 +312,7 @@ export default async function ProjectPage({
         completedAt: null,
         createdAt: latest.createdAt.toISOString(),
         findings: [],
+        findingsPagination: { page: 1, pageSize: 25, total: 0, totalPages: 0, severity: null },
         projectType: null,
         compilerVersion: null,
         contractsDiscovered: null,
