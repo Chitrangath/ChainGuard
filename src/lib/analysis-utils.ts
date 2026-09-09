@@ -40,6 +40,14 @@ export interface AnalysisData {
   gateReasons: string[];
   coverage: string | null;
   evidenceStatus: "VERIFIED" | "LEGACY_UNVERIFIED";
+  firstPartySourcesDiscovered?: number | null;
+  dependencySourcesDiscovered?: number | null;
+  generatedSourcesDiscovered?: number | null;
+  firstPartySourcesTargeted?: number | null;
+  filesScanned?: number | null;
+  sourcesRejected?: number | null;
+  discoveryReasons?: string[];
+  failureReason?: string | null;
 }
 
 export interface AnalysisSummaryData {

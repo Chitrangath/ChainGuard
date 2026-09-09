@@ -138,6 +138,7 @@ export interface AnalysisTarget {
   compiler: CompilerSelection;
   testAvailability: TestAvailability;
   dependencyStrategy: DependencyStrategy;
+  signal?: AbortSignal;
 }
 
 export interface CompilerSelection {
@@ -162,7 +163,8 @@ export interface DiscoveryResult {
   dependencyContracts: string[];
   generatedContracts: string[];
   projectRoots: string[];
-  rejected: Array<{ filePath: string; reason: string }>;
+  rejected: Array<{ filePath: string; reason: string; scope: "FIRST_PARTY" | "DEPENDENCY" | "GENERATED" }>;
+  reasonCodes: string[];
 }
 
 export interface SubmoduleValidationResult {

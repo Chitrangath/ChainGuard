@@ -226,6 +226,23 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
                 Coverage: {analysis.coverage}
               </div>
             )}
+            {analysis.firstPartySourcesDiscovered !== undefined && (
+              <div className="text-metadata">
+                Sources: {analysis.firstPartySourcesDiscovered ?? "—"} first-party / {analysis.dependencySourcesDiscovered ?? "—"} dependency / {analysis.generatedSourcesDiscovered ?? "—"} generated
+              </div>
+            )}
+            {analysis.firstPartySourcesTargeted !== undefined && (
+              <div className="text-metadata">First-party sources selected: {analysis.firstPartySourcesTargeted ?? "—"}</div>
+            )}
+            {analysis.filesScanned !== undefined && (
+              <div className="text-metadata">Files proven scanned: {analysis.filesScanned ?? "Unavailable"}</div>
+            )}
+            {(analysis.sourcesRejected ?? 0) > 0 && (
+              <div className="text-metadata">Sources rejected: {analysis.sourcesRejected} ({(analysis.discoveryReasons ?? []).join(", ")})</div>
+            )}
+            {analysis.failureReason && (
+              <div className="text-metadata">Failure reason: {analysis.failureReason}</div>
+            )}
             <div className="text-metadata">
               {formatTimestamp(analysis.completedAt ?? analysis.createdAt)}
             </div>

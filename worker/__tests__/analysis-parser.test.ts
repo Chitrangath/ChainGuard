@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseSlitherOutput } from "../../src/lib/analysis-parser";
+import { classifySlitherResult, parseSlitherOutput } from "../../src/lib/analysis-parser";
 
 const SLITHER_OUTPUT_REENTRANCY = {
   success: true,
@@ -108,5 +108,11 @@ describe("parseSlitherOutput", () => {
 
   it("returns empty array when no detectors", () => {
     expect(parseSlitherOutput(JSON.stringify({ success: true, results: {} }))).toEqual([]);
+  });
+});
+
+describe("classifySlitherResult process failures", () => {
+  it.each(["TIMEOUT", "OUTPUT_LIMIT", "ABORTED", "SPAWN_FAILED"])("preserves the bounded reason %s", (reason) => {
+    expect(classifySlitherResult("", -1, reason, 1)).toMatchObject({ status: "FAIL", reasonCode: reason });
   });
 });

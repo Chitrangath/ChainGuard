@@ -1,30 +1,31 @@
 import * as fs from "fs";
 import * as path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
+import { runBoundedProcess, type ProcessResult } from "../process-runner";
 import type {
   CompilationResult,
   TestResult,
   AnalysisTarget,
 } from "../types";
 
-const execFileAsync = promisify(execFile);
 const TOOL_TIMEOUT_MS = 120_000;
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
 
-export function dockerRun(
+export async function dockerRun(
   workspaceDir: string,
   command: string[],
   outputDir?: string,
   containerWorkdir?: string,
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  signal?: AbortSignal,
+): Promise<ProcessResult> {
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
   const resolvedOutputDir = outputDir ?? path.join(workspaceDir, "output");
+  const containerName = `chainguard-${path.basename(workspaceDir).replace(/[^a-zA-Z0-9_.-]/g, "")}-analysis`;
 
   const args = [
     "run",
     "--rm",
+    "--name", containerName,
     "--network", "none",
     "--read-only",
     "--cap-drop=ALL",
@@ -42,32 +43,17 @@ export function dockerRun(
     ...command,
   ];
 
-  return runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS });
+  const result = await runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS, signal });
+  if (result.reasonCode) await runBoundedProcess("docker", ["rm", "-f", containerName], { timeoutMs: 10_000 });
+  return result;
 }
 
 async function runCommand(
   cmd: string,
   args: string[],
-  opts: { cwd?: string; timeout?: number } = {},
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  try {
-    const { stdout, stderr } = await execFileAsync(cmd, args, {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? TOOL_TIMEOUT_MS,
-      maxBuffer: 50 * 1024 * 1024,
-    });
-    return { exitCode: 0, stdout, stderr };
-  } catch (err: unknown) {
-    const e = err as { code?: number; stdout?: string; stderr?: string; killed?: boolean };
-    if (e.killed) {
-      return { exitCode: -1, stdout: e.stdout ?? "", stderr: "TIMEOUT" };
-    }
-    return {
-      exitCode: e.code ?? 1,
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? String(err),
-    };
-  }
+  opts: { cwd?: string; timeout?: number; signal?: AbortSignal } = {},
+): Promise<ProcessResult> {
+  return runBoundedProcess(cmd, args, { cwd: opts.cwd, timeoutMs: opts.timeout ?? TOOL_TIMEOUT_MS, signal: opts.signal });
 }
 
 export async function foundryCompile(
@@ -85,12 +71,12 @@ export async function foundryCompile(
 
   const relTarget = path.relative(workspaceDir, target.root);
   const containerWorkdir = `/project/${relTarget}`;
-  const result = await dockerRun(workspaceDir, args, undefined, containerWorkdir);
+  const result = await dockerRun(workspaceDir, args, undefined, containerWorkdir, target.signal);
 
   if (result.exitCode !== 0) {
     return {
       status: "FAIL",
-      reasonCode: "FORGE_BUILD_FAILED",
+      reasonCode: result.reasonCode ?? "FORGE_BUILD_FAILED",
       safeMessage: "Forge compilation failed",
     };
   }
@@ -125,7 +111,7 @@ export async function foundryTest(
 
   const relTarget = path.relative(workspaceDir, target.root);
   const containerWorkdir = `/project/${relTarget}`;
-  const result = await dockerRun(workspaceDir, args, undefined, containerWorkdir);
+  const result = await dockerRun(workspaceDir, args, undefined, containerWorkdir, target.signal);
 
   const testOutput = result.stdout + result.stderr;
   const counts = parseForgeTestOutput(testOutput);
@@ -148,7 +134,7 @@ export async function foundryTest(
   }
 
   if (result.exitCode !== 0) {
-    return { status: "ERROR", reasonCode: "FORGE_TEST_ERROR", safeMessage: "Forge test exited with error" };
+    return { status: "ERROR", reasonCode: result.reasonCode ?? "FORGE_TEST_ERROR", safeMessage: "Forge test exited with error" };
   }
 
   return { status: "PASS", totalTests: total, passedTests: passed, failedTests: 0 };

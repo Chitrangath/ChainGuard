@@ -1,13 +1,11 @@
 import * as fs from "fs";
 import * as path from "path";
-import { execFile, spawn } from "child_process";
-import { promisify } from "util";
+import { runBoundedProcess } from "../process-runner";
 import type {
   CompilationResult,
   AnalysisTarget,
 } from "../types";
 
-const execFileAsync = promisify(execFile);
 const TOOL_TIMEOUT_MS = 120_000;
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
 
@@ -138,10 +136,12 @@ export async function standaloneCompile(
   const gid = process.getgid?.() ?? 1000;
   const relTarget = path.relative(workspaceDir, target.root);
   const containerWorkdir = `/project/${relTarget}`;
+  const containerName = `chainguard-${path.basename(workspaceDir).replace(/[^a-zA-Z0-9_.-]/g, "")}-analysis`;
 
   try {
     const dockerArgs = [
       "run", "--rm", "-i",
+      "--name", containerName,
       "--network", "none",
       "--read-only",
       "--cap-drop=ALL",
@@ -158,30 +158,14 @@ export async function standaloneCompile(
       solcPath, "--standard-json",
     ];
 
-    const stdout = await new Promise<string>((resolve, reject) => {
-      const proc = spawn("docker", dockerArgs, {
-        timeout: TOOL_TIMEOUT_MS,
-        stdio: ["pipe", "pipe", "pipe"],
-      });
-
-      let out = "";
-      let err = "";
-      proc.stdout.on("data", (data: Buffer) => { out += data.toString(); });
-      proc.stderr.on("data", (data: Buffer) => { err += data.toString(); });
-
-      proc.on("close", (code) => {
-        if (code !== 0) {
-          reject(new Error(`solc exited with code ${code}: ${err}`));
-        } else {
-          resolve(out);
-        }
-      });
-
-      proc.on("error", reject);
-
-      proc.stdin.write(inputJson);
-      proc.stdin.end();
+    const processResult = await runBoundedProcess("docker", dockerArgs, {
+      timeoutMs: TOOL_TIMEOUT_MS, signal: target.signal, stdin: inputJson,
     });
+    if (processResult.exitCode !== 0) {
+      if (processResult.reasonCode) await runBoundedProcess("docker", ["rm", "-f", containerName], { timeoutMs: 10_000 });
+      return { status: "FAIL", reasonCode: processResult.reasonCode ?? "COMPILER_EXECUTION_FAILED", safeMessage: "Compiler execution failed safely" };
+    }
+    const stdout = processResult.stdout;
 
     const output: StandardJsonOutput = JSON.parse(stdout);
 

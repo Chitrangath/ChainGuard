@@ -55,6 +55,7 @@ describe("discoverSolidityFiles", () => {
     createFile("src/Vault.sol", "pragma solidity ^0.8.0;");
     const result = discoverSolidityFiles(TEST_DIR);
     expect(result.firstPartyContracts).toEqual(["src/Vault.sol"]);
+    expect(result.generatedContracts).toEqual(["out/Vault.sol"]);
   });
 
   it("excludes cache/ directory", () => {
@@ -62,6 +63,7 @@ describe("discoverSolidityFiles", () => {
     createFile("src/Vault.sol", "pragma solidity ^0.8.0;");
     const result = discoverSolidityFiles(TEST_DIR);
     expect(result.firstPartyContracts).toEqual(["src/Vault.sol"]);
+    expect(result.generatedContracts).toEqual(["cache/solc/Vault.sol"]);
   });
 
   it("excludes artifacts/ directory", () => {
@@ -69,6 +71,7 @@ describe("discoverSolidityFiles", () => {
     createFile("src/Vault.sol", "pragma solidity ^0.8.0;");
     const result = discoverSolidityFiles(TEST_DIR);
     expect(result.firstPartyContracts).toEqual(["src/Vault.sol"]);
+    expect(result.generatedContracts).toEqual(["artifacts/Vault.sol"]);
   });
 
   it("excludes build/ directory", () => {
@@ -76,6 +79,7 @@ describe("discoverSolidityFiles", () => {
     createFile("src/Vault.sol", "pragma solidity ^0.8.0;");
     const result = discoverSolidityFiles(TEST_DIR);
     expect(result.firstPartyContracts).toEqual(["src/Vault.sol"]);
+    expect(result.generatedContracts).toEqual(["build/Vault.sol"]);
   });
 
   it("excludes coverage/ directory", () => {
@@ -171,6 +175,14 @@ describe("discoverSolidityFiles", () => {
       result.firstPartyContracts.length < 20 ||
         result.rejected.some((r) => r.reason === "total_source_size_exceeded"),
     ).toBe(true);
+  });
+
+  it("reports bounded reason codes for every discovery limit", () => {
+    createFile("src/deep/too/deep/Vault.sol", "pragma solidity ^0.8.20;");
+    createFile("src/Big.sol", "x".repeat(100));
+    const result = discoverSolidityFiles(TEST_DIR, { maxDepth: 1, maxFileSizeBytes: 50 });
+    expect(result.reasonCodes).toEqual(["file_too_large", "max_depth_exceeded"]);
+    expect(result.rejected).toHaveLength(2);
   });
 
   it("handles empty directory", () => {

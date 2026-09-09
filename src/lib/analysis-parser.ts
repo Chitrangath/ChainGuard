@@ -136,11 +136,11 @@ export function classifySlitherResult(
   stderr: string,
   contractsTargeted: number,
 ): StaticAnalysisResult {
-  if (stderr === "TIMEOUT") {
+  if (["TIMEOUT", "OUTPUT_LIMIT", "ABORTED", "SPAWN_FAILED"].includes(stderr)) {
     return {
       status: "FAIL",
-      reasonCode: "TIMEOUT",
-      safeMessage: "Slither scan timed out",
+      reasonCode: stderr,
+      safeMessage: "Slither execution failed safely",
     };
   }
 

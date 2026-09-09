@@ -1,4 +1,7 @@
 import type { SubmoduleValidationResult } from "./types";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { runBoundedProcess, type ProcessResult } from "./process-runner";
 
 export interface GitmodulesEntry {
   name: string;
@@ -191,4 +194,24 @@ export function parseGitmodules(content: string): GitmodulesEntry[] {
   if (current) entries.push(current);
 
   return entries;
+}
+
+export async function prepareSubmodules(repoDir: string, parentRepoUrl: string, options: {
+  signal?: AbortSignal;
+  run?: (cmd: string, args: string[]) => Promise<ProcessResult>;
+} = {}): Promise<{ success: boolean; reason?: string }> {
+  const configPath = path.join(repoDir, ".gitmodules");
+  if (!fs.existsSync(configPath)) return { success: true };
+  const entries = parseGitmodules(fs.readFileSync(configPath, "utf8"));
+  if (entries.length === 0) return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
+  const validation = validateAllSubmodules(entries, parentRepoUrl);
+  if (!validation.valid) return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
+  const execute = options.run ?? ((cmd, args) => runBoundedProcess(cmd, args, { cwd: repoDir, timeoutMs: 60_000, signal: options.signal }));
+  for (const submodule of validation.urls) {
+    const target = path.join(repoDir, submodule.path);
+    if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) return { success: false, reason: "SUBMODULE_PATH_INVALID" };
+    const result = await execute("git", ["-c", "protocol.file.allow=never", "submodule", "update", "--init", "--depth", "1", "--single-branch", submodule.path]);
+    if (result.exitCode !== 0) return { success: false, reason: "SUBMODULE_CHECKOUT_FAILED" };
+  }
+  return { success: true };
 }

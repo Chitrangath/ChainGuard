@@ -31,6 +31,14 @@ export interface AnalysisResult {
   gateReasons: string[];
   coverage: string | null;
   evidenceStatus: EvidenceStatus;
+  firstPartySourcesDiscovered: number | null;
+  dependencySourcesDiscovered: number | null;
+  generatedSourcesDiscovered: number | null;
+  firstPartySourcesTargeted: number | null;
+  filesScanned: number | null;
+  sourcesRejected: number | null;
+  discoveryReasons: string[];
+  failureReason: string | null;
 }
 
 export interface AnalysisDetailResult extends AnalysisResult {
@@ -71,6 +79,14 @@ function mapAnalysisToResult(
     gateReasons?: string[];
     coverage?: string | null;
     evidenceVersion?: number | null;
+    firstPartySourcesDiscovered?: number | null;
+    dependencySourcesDiscovered?: number | null;
+    generatedSourcesDiscovered?: number | null;
+    firstPartySourcesTargeted?: number | null;
+    filesScanned?: number | null;
+    sourcesRejected?: number | null;
+    discoveryReasons?: string[];
+    failureReason?: string | null;
     findings?: Array<{ id: string }>;
   },
   findingCount?: number,
@@ -104,6 +120,14 @@ function mapAnalysisToResult(
     gateReasons: analysis.gateReasons ?? [],
     coverage: analysis.coverage ?? null,
     evidenceStatus: presented.evidenceStatus,
+    firstPartySourcesDiscovered: analysis.firstPartySourcesDiscovered ?? null,
+    dependencySourcesDiscovered: analysis.dependencySourcesDiscovered ?? null,
+    generatedSourcesDiscovered: analysis.generatedSourcesDiscovered ?? null,
+    firstPartySourcesTargeted: analysis.firstPartySourcesTargeted ?? null,
+    filesScanned: analysis.filesScanned ?? null,
+    sourcesRejected: analysis.sourcesRejected ?? null,
+    discoveryReasons: analysis.discoveryReasons ?? [],
+    failureReason: analysis.failureReason ?? null,
   };
 }
 
@@ -132,6 +156,14 @@ function cachedToResult(cached: CachedAnalysis): AnalysisResult {
     gateReasons: cached.gateReasons ?? [],
     coverage: cached.coverage ?? null,
     evidenceStatus: cached.evidenceStatus,
+    firstPartySourcesDiscovered: cached.firstPartySourcesDiscovered ?? null,
+    dependencySourcesDiscovered: cached.dependencySourcesDiscovered ?? null,
+    generatedSourcesDiscovered: cached.generatedSourcesDiscovered ?? null,
+    firstPartySourcesTargeted: cached.firstPartySourcesTargeted ?? null,
+    filesScanned: cached.filesScanned ?? null,
+    sourcesRejected: cached.sourcesRejected ?? null,
+    discoveryReasons: cached.discoveryReasons ?? [],
+    failureReason: cached.failureReason ?? null,
   };
 }
 
@@ -230,6 +262,14 @@ export async function getAnalysisWithFindings(
       coverage: result.coverage,
       evidenceVersion: analysis.evidenceVersion,
       evidenceStatus: result.evidenceStatus,
+      firstPartySourcesDiscovered: result.firstPartySourcesDiscovered,
+      dependencySourcesDiscovered: result.dependencySourcesDiscovered,
+      generatedSourcesDiscovered: result.generatedSourcesDiscovered,
+      firstPartySourcesTargeted: result.firstPartySourcesTargeted,
+      filesScanned: result.filesScanned,
+      sourcesRejected: result.sourcesRejected,
+      discoveryReasons: result.discoveryReasons,
+      failureReason: result.failureReason,
     };
     await setCachedAnalysis(analysisId, cacheData);
   }

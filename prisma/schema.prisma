@@ -44,6 +44,14 @@ model Analysis {
   gateReasons             String[]
   coverage                AnalysisCoverage?
   evidenceVersion         Int?
+  firstPartySourcesDiscovered Int?
+  dependencySourcesDiscovered Int?
+  generatedSourcesDiscovered Int?
+  firstPartySourcesTargeted Int?
+  filesScanned            Int?
+  sourcesRejected         Int?
+  discoveryReasons        String[]
+  failureReason           String?
 
   @@map("analyses")
 }

@@ -138,6 +138,14 @@ export default async function ProjectPage({
     gateReasons: string[];
     coverage: string | null;
     evidenceStatus: EvidenceStatus;
+    firstPartySourcesDiscovered?: number | null;
+    dependencySourcesDiscovered?: number | null;
+    generatedSourcesDiscovered?: number | null;
+    firstPartySourcesTargeted?: number | null;
+    filesScanned?: number | null;
+    sourcesRejected?: number | null;
+    discoveryReasons?: string[];
+    failureReason?: string | null;
   } | null = null;
 
   if (analysisId) {
@@ -190,6 +198,14 @@ export default async function ProjectPage({
         gateReasons: selRaw.gateReasons ?? [],
         coverage: selRaw.coverage ?? null,
         evidenceStatus: evidence.evidenceStatus,
+        firstPartySourcesDiscovered: selRaw.firstPartySourcesDiscovered,
+        dependencySourcesDiscovered: selRaw.dependencySourcesDiscovered,
+        generatedSourcesDiscovered: selRaw.generatedSourcesDiscovered,
+        firstPartySourcesTargeted: selRaw.firstPartySourcesTargeted,
+        filesScanned: selRaw.filesScanned,
+        sourcesRejected: selRaw.sourcesRejected,
+        discoveryReasons: selRaw.discoveryReasons,
+        failureReason: selRaw.failureReason,
       };
     }
   }
@@ -248,6 +264,14 @@ export default async function ProjectPage({
           gateReasons: latestWithFindings.gateReasons ?? [],
           coverage: latestWithFindings.coverage ?? null,
           evidenceStatus: evidence.evidenceStatus,
+          firstPartySourcesDiscovered: latestWithFindings.firstPartySourcesDiscovered,
+          dependencySourcesDiscovered: latestWithFindings.dependencySourcesDiscovered,
+          generatedSourcesDiscovered: latestWithFindings.generatedSourcesDiscovered,
+          firstPartySourcesTargeted: latestWithFindings.firstPartySourcesTargeted,
+          filesScanned: latestWithFindings.filesScanned,
+          sourcesRejected: latestWithFindings.sourcesRejected,
+          discoveryReasons: latestWithFindings.discoveryReasons,
+          failureReason: latestWithFindings.failureReason,
         };
       }
     } else {

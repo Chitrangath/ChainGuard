@@ -1,8 +1,10 @@
 import { describe, it, expect } from "vitest";
+import * as fs from "node:fs";
 import {
   validateSubmoduleUrl,
   validateAllSubmodules,
   parseGitmodules,
+  prepareSubmodules,
   type GitmodulesEntry,
 } from "../submodule";
 
@@ -168,5 +170,18 @@ describe("validateAllSubmodules", () => {
     const result = validateAllSubmodules([], "https://github.com/user/repo");
     expect(result.valid).toBe(true);
     expect(result.urls).toEqual([]);
+  });
+});
+
+describe("prepareSubmodules", () => {
+  it("returns a safe incomplete reason when checkout fails", async () => {
+    const dir = fs.mkdtempSync("/tmp/chainguard-submodule-failure-");
+    try {
+      fs.writeFileSync(`${dir}/.gitmodules`, `[submodule "dep"]\npath = lib/dep\nurl = https://github.com/user/dep.git\n`);
+      const result = await prepareSubmodules(dir, "https://github.com/user/root", { run: async () => ({ exitCode: 1, stdout: "", stderr: "bounded" }) });
+      expect(result).toEqual({ success: false, reason: "SUBMODULE_CHECKOUT_FAILED" });
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

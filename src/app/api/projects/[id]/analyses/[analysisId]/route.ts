@@ -41,6 +41,14 @@ export async function GET(
       gateReasons: analysis.gateReasons,
       coverage: analysis.coverage,
       evidenceStatus: analysis.evidenceStatus,
+      firstPartySourcesDiscovered: analysis.firstPartySourcesDiscovered,
+      dependencySourcesDiscovered: analysis.dependencySourcesDiscovered,
+      generatedSourcesDiscovered: analysis.generatedSourcesDiscovered,
+      firstPartySourcesTargeted: analysis.firstPartySourcesTargeted,
+      filesScanned: analysis.filesScanned,
+      sourcesRejected: analysis.sourcesRejected,
+      discoveryReasons: analysis.discoveryReasons,
+      failureReason: analysis.failureReason,
     });
   } catch (error) {
     return handleApiError(error);

@@ -21,8 +21,8 @@ curl -fsS "$BASE_URL" >/dev/null || {
 
 project_payload=$(node -e '
   const [name, repositoryUrl] = process.argv.slice(1);
-  process.stdout.write(JSON.stringify({name, repositoryUrl, description: "Real-runtime P0 regression"}));
-' "P0 ${E2E_MODE} $(date +%s)" "$E2E_TEST_REPO_URL")
+  process.stdout.write(JSON.stringify({name, repositoryUrl, description: "Real-runtime P1A regression"}));
+' "P1A ${E2E_MODE} $(date +%s)" "$E2E_TEST_REPO_URL")
 project_response=$(curl -fsS -X POST "$BASE_URL/api/projects" -H 'Content-Type: application/json' -d "$project_payload")
 project_id=$(node -e 'const d=JSON.parse(process.argv[1]); if(!d.id) process.exit(1); console.log(d.id)' "$project_response")
 analysis_response=$(curl -fsS -X POST "$BASE_URL/api/projects/$project_id/analyze" -H 'Content-Type: application/json' -d '{}')
@@ -46,6 +46,12 @@ const result = JSON.parse(process.env.RESULT_JSON);
 const detail = JSON.parse(process.env.DETAIL_JSON);
 assert.equal(result.status, "COMPLETED");
 assert.equal(result.evidenceStatus, "VERIFIED");
+assert.equal(typeof result.firstPartySourcesDiscovered, "number");
+assert.equal(typeof result.dependencySourcesDiscovered, "number");
+assert.equal(typeof result.generatedSourcesDiscovered, "number");
+assert.equal(typeof result.firstPartySourcesTargeted, "number");
+assert.equal(typeof result.sourcesRejected, "number");
+assert.ok(Array.isArray(result.discoveryReasons));
 
 if (mode === "no-contract") {
   assert.equal(result.riskScore, null);
@@ -85,6 +91,13 @@ if (mode === "no-contract") {
     contractsDiscovered: result.contractsDiscovered,
     contractsCompiled: result.contractsCompiled,
     contractsTargetedForScan: result.contractsTargetedForScan,
+    firstPartySourcesDiscovered: result.firstPartySourcesDiscovered,
+    dependencySourcesDiscovered: result.dependencySourcesDiscovered,
+    generatedSourcesDiscovered: result.generatedSourcesDiscovered,
+    firstPartySourcesTargeted: result.firstPartySourcesTargeted,
+    filesScanned: result.filesScanned,
+    sourcesRejected: result.sourcesRejected,
+    discoveryReasons: result.discoveryReasons,
     findingsByScope: scoped,
   }, null, 2));
 }

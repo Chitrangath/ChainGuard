@@ -33,7 +33,8 @@ export interface DiscoveryResult {
   dependencyContracts: string[];
   generatedContracts: string[];
   projectRoots: string[];
-  rejected: Array<{ filePath: string; reason: string }>;
+  rejected: Array<{ filePath: string; reason: string; scope: "FIRST_PARTY" | "DEPENDENCY" | "GENERATED" }>;
+  reasonCodes: string[];
 }
 
 function isExcludedDir(name: string): boolean {
@@ -82,6 +83,11 @@ function isGeneratedPath(relPath: string): boolean {
   return segments.some((part) => ["out", "artifacts", "build", "cache"].includes(part));
 }
 
+function reject(result: DiscoveryResult, filePath: string, reason: string) {
+  const scope = isGeneratedPath(filePath) ? "GENERATED" : isDependencyPath(filePath) ? "DEPENDENCY" : "FIRST_PARTY";
+  result.rejected.push({ filePath, reason, scope });
+}
+
 function walkDir(
   dir: string,
   repoRoot: string,
@@ -89,12 +95,21 @@ function walkDir(
   opts: Required<DiscoveryOptions>,
   result: DiscoveryResult,
   currentTotalSize: number,
+  forcedGenerated = false,
 ): number {
-  if (depth > opts.maxDepth) return currentTotalSize;
+  if (depth > opts.maxDepth) {
+    reject(result, path.relative(repoRoot, dir), "max_depth_exceeded");
+    return currentTotalSize;
+  }
 
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true });
+    entries.sort((a, b) => {
+      const aGenerated = a.isDirectory() && ["out", "artifacts", "build", "cache"].includes(a.name);
+      const bGenerated = b.isDirectory() && ["out", "artifacts", "build", "cache"].includes(b.name);
+      return Number(aGenerated) - Number(bGenerated) || a.name.localeCompare(b.name);
+    });
   } catch {
     return currentTotalSize;
   }
@@ -103,10 +118,7 @@ function walkDir(
     if (result.firstPartyContracts.length +
         result.dependencyContracts.length +
         result.generatedContracts.length >= opts.maxFiles) {
-      result.rejected.push({
-        filePath: path.relative(repoRoot, path.join(dir, entry.name)),
-        reason: "max_files_exceeded",
-      });
+      reject(result, path.relative(repoRoot, path.join(dir, entry.name)), "max_files_exceeded");
       continue;
     }
 
@@ -114,13 +126,14 @@ function walkDir(
     const relPath = path.relative(repoRoot, fullPath);
 
     if (entry.isDirectory()) {
-      if (isExcludedDir(entry.name)) continue;
-      currentTotalSize = walkDir(fullPath, repoRoot, depth + 1, opts, result, currentTotalSize);
+      const generatedDirectory = forcedGenerated || ["out", "artifacts", "build", "cache"].includes(entry.name);
+      if (isExcludedDir(entry.name) && !generatedDirectory) continue;
+      currentTotalSize = walkDir(fullPath, repoRoot, depth + 1, opts, result, currentTotalSize, generatedDirectory);
       continue;
     }
 
     if (entry.isSymbolicLink()) {
-      result.rejected.push({ filePath: relPath, reason: "symlink" });
+      reject(result, relPath, "symlink");
       continue;
     }
 
@@ -136,17 +149,17 @@ function walkDir(
     }
 
     if (stat.size > opts.maxFileSizeBytes) {
-      result.rejected.push({ filePath: relPath, reason: "file_too_large" });
+      reject(result, relPath, "file_too_large");
       continue;
     }
 
     currentTotalSize += stat.size;
     if (currentTotalSize > opts.maxTotalSourceSizeBytes) {
-      result.rejected.push({ filePath: relPath, reason: "total_source_size_exceeded" });
+      reject(result, relPath, "total_source_size_exceeded");
       continue;
     }
 
-    if (isGeneratedPath(relPath)) {
+    if (forcedGenerated || isGeneratedPath(relPath)) {
       result.generatedContracts.push(relPath);
     } else if (isDependencyPath(relPath)) {
       result.dependencyContracts.push(relPath);
@@ -211,6 +224,7 @@ export function discoverSolidityFiles(
     generatedContracts: [],
     projectRoots: [],
     rejected: [],
+    reasonCodes: [],
   };
 
   walkDir(repoDir, repoDir, 0, opts, result, 0);
@@ -219,6 +233,7 @@ export function discoverSolidityFiles(
     ...result.firstPartyContracts,
     ...result.dependencyContracts,
   ]);
+  result.reasonCodes = [...new Set(result.rejected.map((item) => item.reason))].sort();
 
   return result;
 }

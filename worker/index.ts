@@ -75,6 +75,11 @@ async function processJob(job: { id: string; projectId: string }) {
         where: { id: job.id },
         data: {
           status: "FAILED",
+          riskScore: null,
+          deploymentStatus: "BLOCKED",
+          coverage: "FAILED",
+          gateReasons: ["INCOMPLETE_ANALYSIS"],
+          failureReason: "ANALYSIS_EXECUTION_FAILED",
           completedAt: new Date(),
         },
       });
@@ -89,6 +94,11 @@ async function processJob(job: { id: string; projectId: string }) {
         where: { id: job.id },
         data: {
           status: "FAILED",
+          riskScore: null,
+          deploymentStatus: "BLOCKED",
+          coverage: "FAILED",
+          gateReasons: ["INCOMPLETE_ANALYSIS"],
+          failureReason: "ANALYSIS_EXECUTION_FAILED",
           completedAt: new Date(),
         },
       });
@@ -111,6 +121,11 @@ async function checkStaleJobs() {
       },
       data: {
         status: "FAILED",
+        riskScore: null,
+        deploymentStatus: "BLOCKED",
+        coverage: "FAILED",
+        gateReasons: ["INCOMPLETE_ANALYSIS"],
+        failureReason: "ANALYSIS_TIMEOUT",
         completedAt: new Date(),
       },
     });

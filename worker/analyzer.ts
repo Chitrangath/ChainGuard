@@ -1,13 +1,11 @@
 import * as fs from "fs";
 import * as path from "path";
-import { execFile } from "child_process";
-import { promisify } from "util";
 import { getDb } from "./db";
 import { calculateRisk } from "../src/lib/risk-engine";
 import { classifySlitherResult, parseSlitherOutput } from "../src/lib/analysis-parser";
 import { discoverSolidityFiles } from "./discovery";
 import { selectCompiler, parseFoundryToml, parsePragma } from "./compiler";
-import { parseGitmodules, validateAllSubmodules } from "./submodule";
+import { prepareSubmodules } from "./submodule";
 import { foundryCompile, foundryTest } from "./adapters/foundry";
 import { standaloneCompile } from "./adapters/standalone";
 import type { Severity } from "../src/generated/prisma/enums";
@@ -18,8 +16,7 @@ import type {
   StaticAnalysisResult,
   GateReason,
 } from "./types";
-
-const execFileAsync = promisify(execFile);
+import { runBoundedProcess, type ProcessResult } from "./process-runner";
 
 const WORKSPACE_BASE = "/tmp/guardrails";
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
@@ -103,26 +100,9 @@ function workspacePath(analysisId: string): string {
 async function runCommand(
   cmd: string,
   args: string[],
-  opts: { cwd?: string; timeout?: number } = {},
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  try {
-    const { stdout, stderr } = await execFileAsync(cmd, args, {
-      cwd: opts.cwd,
-      timeout: opts.timeout ?? TOOL_TIMEOUT_MS,
-      maxBuffer: 50 * 1024 * 1024,
-    });
-    return { exitCode: 0, stdout, stderr };
-  } catch (err: unknown) {
-    const e = err as { code?: number; stdout?: string; stderr?: string; killed?: boolean };
-    if (e.killed) {
-      return { exitCode: -1, stdout: e.stdout ?? "", stderr: "TIMEOUT" };
-    }
-    return {
-      exitCode: e.code ?? 1,
-      stdout: e.stdout ?? "",
-      stderr: e.stderr ?? String(err),
-    };
-  }
+  opts: { cwd?: string; timeout?: number; signal?: AbortSignal } = {},
+): Promise<ProcessResult> {
+  return runBoundedProcess(cmd, args, { cwd: opts.cwd, timeoutMs: opts.timeout ?? TOOL_TIMEOUT_MS, signal: opts.signal });
 }
 
 async function dockerRun(
@@ -131,14 +111,17 @@ async function dockerRun(
   outputDir?: string,
   containerWorkdir?: string,
   environment: Record<string, string> = {},
-): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  signal?: AbortSignal,
+): Promise<ProcessResult> {
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
   const resolvedOutputDir = outputDir ?? path.join(workspaceDir, "output");
+  const containerName = `chainguard-${path.basename(workspaceDir).replace(/[^a-zA-Z0-9_.-]/g, "")}-analysis`;
 
   const args = [
     "run",
     "--rm",
+    "--name", containerName,
     "--network", "none",
     "--read-only",
     "--cap-drop=ALL",
@@ -156,18 +139,21 @@ async function dockerRun(
     ANALYZER_IMAGE,
     ...command,
   ];
-  return runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS });
+  const result = await runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS, signal });
+  if (result.reasonCode) await runBoundedProcess("docker", ["rm", "-f", containerName], { timeoutMs: 10_000 });
+  return result;
 }
 
 async function gitClone(
   url: string,
   dest: string,
+  signal?: AbortSignal,
 ): Promise<{ exitCode: number; stderr: string }> {
   fs.mkdirSync(dest, { recursive: true });
   const result = await runCommand(
     "git",
     ["clone", "--depth", "1", url, path.join(dest, "repo")],
-    { timeout: CLONE_TIMEOUT_MS },
+    { timeout: CLONE_TIMEOUT_MS, signal },
   );
   return { exitCode: result.exitCode, stderr: result.stderr };
 }
@@ -175,36 +161,9 @@ async function gitClone(
 async function initSubmodules(
   repoDir: string,
   parentRepoUrl: string,
+  signal?: AbortSignal,
 ): Promise<{ success: boolean; reason?: string }> {
-  const gitmodulesPath = path.join(repoDir, ".gitmodules");
-  if (!fs.existsSync(gitmodulesPath)) return { success: true };
-
-  const content = fs.readFileSync(gitmodulesPath, "utf-8");
-  const entries = parseGitmodules(content);
-  if (entries.length === 0) return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
-
-  const validation = validateAllSubmodules(entries, parentRepoUrl);
-  if (!validation.valid) {
-    return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
-  }
-
-  for (const sub of validation.urls) {
-    const subPath = path.join(repoDir, sub.path);
-    if (fs.existsSync(subPath) && fs.lstatSync(subPath).isSymbolicLink()) {
-      return { success: false, reason: "SUBMODULE_PATH_INVALID" };
-    }
-    const result = await runCommand(
-      "git",
-      [
-        "-c", "protocol.file.allow=never",
-        "submodule", "update", "--init", "--depth", "1",
-        "--single-branch", sub.path,
-      ],
-      { cwd: repoDir, timeout: CLONE_TIMEOUT_MS },
-    );
-    if (result.exitCode !== 0) return { success: false, reason: "SUBMODULE_CHECKOUT_FAILED" };
-  }
-  return { success: true };
+  return prepareSubmodules(repoDir, parentRepoUrl, { signal });
 }
 
 function classifyProject(repoDir: string, discovery: ReturnType<typeof discoverSolidityFiles>): ProjectType {
@@ -239,9 +198,11 @@ function selectTarget(
       if (fs.existsSync(path.join(root, "foundry.toml"))) {
         const srcDir = path.join(root, "src");
         const testDir = path.join(root, "test");
+        const srcPrefix = `${path.relative(repoDir, srcDir).replaceAll("\\", "/")}/`;
+        const testPrefix = `${path.relative(repoDir, testDir).replaceAll("\\", "/")}/`;
         const sourcePaths = discovery.firstPartyContracts.filter(
-          (p) => p.startsWith(path.relative(repoDir, srcDir)) ||
-                 p.startsWith(path.relative(repoDir, testDir)),
+          (p) => p.replaceAll("\\", "/").startsWith(srcPrefix) ||
+                 p.replaceAll("\\", "/").startsWith(testPrefix),
         );
         return { targetRoot: root, sourcePaths };
       }
@@ -300,6 +261,7 @@ async function runSlither(
   outputDir: string,
   compilerVersion: string,
   contractsTargeted: number,
+  signal?: AbortSignal,
 ): Promise<StaticAnalysisResult> {
   const slitherJsonPath = "/tmp/output/slither.json";
   const solcFile = `/usr/local/lib/solc-${compilerVersion}`;
@@ -314,6 +276,7 @@ async function runSlither(
     outputDir,
     `/project/${path.relative(workspaceDir, targetRoot)}`,
     { FOUNDRY_SOLC: solcFile },
+    signal,
   );
 
   let rawJson = "";
@@ -333,30 +296,33 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
 
   fs.mkdirSync(outputDir, { recursive: true });
 
-  const overallTimer = setTimeout(() => {
-    cleanup(wsDir);
-  }, OVERALL_TIMEOUT_MS);
+  const controller = new AbortController();
+  const overallTimer = setTimeout(() => controller.abort(), OVERALL_TIMEOUT_MS);
 
   try {
     if (!validateUrl(ctx.repositoryUrl)) {
       throw new Error("Invalid repository URL");
     }
 
-    const cloneResult = await gitClone(ctx.repositoryUrl, wsDir);
+    const cloneResult = await gitClone(ctx.repositoryUrl, wsDir, controller.signal);
+    if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
     if (cloneResult.exitCode !== 0) {
       throw new Error(`Clone failed: ${cloneResult.stderr}`);
     }
 
-    const submodules = await initSubmodules(repoDir, ctx.repositoryUrl);
+    const submodules = await initSubmodules(repoDir, ctx.repositoryUrl, controller.signal);
+    if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
     if (!submodules.success) {
       await db.analysis.update({ where: { id: ctx.analysisId }, data: {
         status: "COMPLETED", compilationStatus: "NOT_RUN", testStatus: "NOT_RUN",
         securityAnalysisStatus: "NOT_RUN", riskScore: null, deploymentStatus: "BLOCKED",
         coverage: "PARTIAL", gateReasons: [submodules.reason ?? "SUBMODULE_PREPARATION_FAILED"],
+        failureReason: submodules.reason ?? "SUBMODULE_PREPARATION_FAILED",
         evidenceVersion: 2, completedAt: new Date(),
       }});
       return { success: true };
     }
+    if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
 
     await db.analysis.update({
       where: { id: ctx.analysisId },
@@ -366,6 +332,15 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     const discovery = discoverSolidityFiles(repoDir);
     const projectType = classifyProject(repoDir, discovery);
     const { targetRoot, sourcePaths } = selectTarget(projectType, discovery, repoDir);
+    const incompleteFirstPartyDiscovery = discovery.rejected.some((item) => item.scope === "FIRST_PARTY");
+    const discoveryEvidence = {
+      firstPartySourcesDiscovered: discovery.firstPartyContracts.length,
+      dependencySourcesDiscovered: discovery.dependencyContracts.length,
+      generatedSourcesDiscovered: discovery.generatedContracts.length,
+      firstPartySourcesTargeted: sourcePaths.length,
+      sourcesRejected: discovery.rejected.length,
+      discoveryReasons: discovery.reasonCodes,
+    };
 
     if (sourcePaths.length === 0) {
       await db.analysis.update({
@@ -382,6 +357,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           deploymentStatus: "BLOCKED",
           gateReasons: ["NO_CONTRACTS_FOUND"],
           evidenceVersion: 2,
+          ...discoveryEvidence,
           completedAt: new Date(),
         },
       });
@@ -407,6 +383,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           compiler: compilerSelection,
           testAvailability: { hasTests: sourcePaths.some((p) => p.includes("test")), testPaths: [] },
           dependencyStrategy: { type: "foundry_lib", paths: ["lib"] },
+          signal: controller.signal,
         },
         wsDir,
       );
@@ -420,10 +397,12 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           compiler: compilerSelection,
           testAvailability: { hasTests: false, testPaths: [] },
           dependencyStrategy: { type: "none", paths: [] },
+          signal: controller.signal,
         },
         wsDir,
       );
     }
+    if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
 
     let tests: TestResult;
     if (compilation.status !== "PASS") {
@@ -438,12 +417,14 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           compiler: compilerSelection,
           testAvailability: { hasTests: true, testPaths: [] },
           dependencyStrategy: { type: "foundry_lib", paths: ["lib"] },
+          signal: controller.signal,
         },
         wsDir,
       );
     } else {
       tests = { status: "NO_TESTS", reasonCode: "NO_TEST_FRAMEWORK" };
     }
+    if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
 
     const contractsTargeted = compilation.status === "PASS" ? compilation.contractsCompiled : sourcePaths.length;
 
@@ -451,8 +432,9 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     if (compilation.status !== "PASS") {
       staticAnalysis = { status: "NOT_RUN", reasonCode: "COMPILATION_FAILED", safeMessage: "Compilation failed, Slither skipped" };
     } else {
-      staticAnalysis = await runSlither(targetRoot, wsDir, outputDir, compilerSelection.version, contractsTargeted);
+      staticAnalysis = await runSlither(targetRoot, wsDir, outputDir, compilerSelection.version, contractsTargeted, controller.signal);
     }
+    if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
 
     const securityAnalysisStatus = staticAnalysis.status === "PASS" ? "PASS" :
       staticAnalysis.status === "FAIL" ? "FAIL" : "NOT_RUN";
@@ -464,6 +446,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     if (projectType === "UNKNOWN_SOLIDITY" || compilation.status === "UNSUPPORTED") {
       coverage = "FAILED";
     }
+    if (incompleteFirstPartyDiscovery && coverage === "FULL") coverage = "PARTIAL";
 
     const severityCounts: Record<Severity, number> = {
       CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0,
@@ -485,6 +468,13 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     const totalTests = tests.status === "PASS" || tests.status === "FAIL" ? tests.totalTests : null;
     const passedTests = tests.status === "PASS" || tests.status === "FAIL" ? tests.passedTests : null;
     const failedTests = tests.status === "PASS" || tests.status === "FAIL" ? tests.failedTests : null;
+    const failureReason = compilation.status !== "PASS"
+      ? compilation.reasonCode
+      : staticAnalysis.status !== "PASS"
+        ? staticAnalysis.reasonCode
+        : tests.status === "ERROR"
+          ? tests.reasonCode
+          : null;
 
     await db.analysis.update({
       where: { id: ctx.analysisId },
@@ -501,11 +491,14 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
         compilerVersion: compilation.status === "PASS" ? compilation.compilerVersion : null,
         contractsDiscovered: discovery.firstPartyContracts.length,
         contractsCompiled: compilation.status === "PASS" ? compilation.contractsCompiled : null,
-        contractsTargetedForScan: contractsTargeted,
+        contractsTargetedForScan: null,
+        filesScanned: null,
         securityAnalysisStatus,
         gateReasons: risk.gateReasons,
         coverage,
         evidenceVersion: 2,
+        failureReason,
+        ...discoveryEvidence,
         completedAt: new Date(),
       },
     });
@@ -528,8 +521,24 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
 
     return { success: true };
   } catch (error) {
+    if (controller.signal.aborted) {
+      await db.analysis.update({ where: { id: ctx.analysisId }, data: {
+        status: "FAILED", riskScore: null, deploymentStatus: "BLOCKED", coverage: "FAILED",
+        gateReasons: ["INCOMPLETE_ANALYSIS"], failureReason: "ANALYSIS_TIMEOUT",
+        evidenceVersion: 2, completedAt: new Date(),
+      }});
+      return { success: true };
+    }
     const msg = error instanceof Error ? error.message : String(error);
-    return { success: false, error: msg };
+    if (msg === "Invalid repository URL") return { success: false, error: msg };
+    const safeReason = (["TIMEOUT", "OUTPUT_LIMIT", "ABORTED", "SPAWN_FAILED"] as const)
+      .find((reason) => msg.includes(reason)) ?? "ANALYSIS_EXECUTION_FAILED";
+    await db.analysis.update({ where: { id: ctx.analysisId }, data: {
+      status: "FAILED", riskScore: null, deploymentStatus: "BLOCKED", coverage: "FAILED",
+      gateReasons: ["INCOMPLETE_ANALYSIS"], failureReason: safeReason,
+      evidenceVersion: 2, completedAt: new Date(),
+    }});
+    return { success: true };
   } finally {
     clearTimeout(overallTimer);
     cleanup(wsDir);

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { getRedisClient } from "./redis";
 
 const CACHE_TTL_SECONDS = 300;
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 const KEY_PREFIX = "analysis:";
 
 const FindingSchema = z.object({
@@ -45,6 +45,14 @@ const AnalysisEnvelopeSchema = z.object({
     coverage: z.string().nullable().optional(),
     evidenceVersion: z.number().nullable(),
     evidenceStatus: z.enum(["VERIFIED", "LEGACY_UNVERIFIED"]),
+    firstPartySourcesDiscovered: z.number().nullable().optional(),
+    dependencySourcesDiscovered: z.number().nullable().optional(),
+    generatedSourcesDiscovered: z.number().nullable().optional(),
+    firstPartySourcesTargeted: z.number().nullable().optional(),
+    filesScanned: z.number().nullable().optional(),
+    sourcesRejected: z.number().nullable().optional(),
+    discoveryReasons: z.array(z.string()).optional(),
+    failureReason: z.string().nullable().optional(),
   }),
 });
 
