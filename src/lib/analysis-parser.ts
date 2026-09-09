@@ -45,6 +45,29 @@ export interface ParsedFinding {
   line: number | null;
   description: string;
   source: string;
+  scope: "FIRST_PARTY" | "DEPENDENCY" | "GENERATED" | "UNKNOWN";
+}
+
+function pathScope(filename: string): ParsedFinding["scope"] {
+  const normalized = filename.replaceAll("\\", "/").replace(/^\.\//, "");
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.some((part) => ["out", "artifacts", "build", "cache"].includes(part))) {
+    return "GENERATED";
+  }
+  if (segments.includes("lib") || segments.includes("node_modules")) {
+    return "DEPENDENCY";
+  }
+  return normalized ? "FIRST_PARTY" : "UNKNOWN";
+}
+
+function extractScope(elements: SlitherElement[]): ParsedFinding["scope"] {
+  const scopes = elements.map((element) =>
+    pathScope(element.source_mapping?.filename_relative ?? ""),
+  );
+  if (scopes.includes("FIRST_PARTY")) return "FIRST_PARTY";
+  if (scopes.includes("DEPENDENCY")) return "DEPENDENCY";
+  if (scopes.includes("GENERATED")) return "GENERATED";
+  return "UNKNOWN";
 }
 
 function extractContract(elements: SlitherElement[]): string | null {
@@ -102,6 +125,7 @@ export function parseSlitherOutput(rawJson: string): ParsedFinding[] {
       line,
       description: detector.description,
       source: "slither",
+      scope: extractScope(detector.elements),
     };
   });
 }

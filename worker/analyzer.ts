@@ -130,6 +130,7 @@ async function dockerRun(
   command: string[],
   outputDir?: string,
   containerWorkdir?: string,
+  environment: Record<string, string> = {},
 ): Promise<{ exitCode: number; stdout: string; stderr: string }> {
   const uid = process.getuid?.() ?? 1000;
   const gid = process.getgid?.() ?? 1000;
@@ -149,6 +150,7 @@ async function dockerRun(
     "--workdir", containerWorkdir ?? "/project",
     "--tmpfs", "/tmp:rw,nosuid,nodev,exec,size=256m",
     "--env", "HOME=/tmp",
+    ...Object.entries(environment).flatMap(([key, value]) => ["--env", `${key}=${value}`]),
     "-v", `${workspaceDir}:/project:rw`,
     "-v", `${resolvedOutputDir}:/tmp/output:rw`,
     ANALYZER_IMAGE,
@@ -299,8 +301,13 @@ async function runSlither(
     `slither . --json ${slitherJsonPath} --fail-high --solc ${solcFile}`,
   ].join(" && ");
 
-  const result = await dockerRun(workspaceDir, ["sh", "-c", setupCmd], outputDir,
-    `/project/${path.relative(workspaceDir, targetRoot)}`);
+  const result = await dockerRun(
+    workspaceDir,
+    ["sh", "-c", setupCmd],
+    outputDir,
+    `/project/${path.relative(workspaceDir, targetRoot)}`,
+    { FOUNDRY_SOLC: solcFile },
+  );
 
   let rawJson = "";
   const slitherJsonFile = path.join(outputDir, "slither.json");
@@ -355,7 +362,10 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           coverage: "FAILED",
           projectType,
           contractsDiscovered: 0,
+          riskScore: null,
+          deploymentStatus: "BLOCKED",
           gateReasons: ["NO_CONTRACTS_FOUND"],
+          evidenceVersion: 2,
           completedAt: new Date(),
         },
       });
@@ -443,7 +453,8 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0,
     };
     const findings = staticAnalysis.status === "PASS" ? staticAnalysis.findings : [];
-    for (const f of findings) {
+    const scoredFindings = findings.filter((finding) => finding.scope === "FIRST_PARTY");
+    for (const f of scoredFindings) {
       severityCounts[f.severity]++;
     }
 
@@ -452,6 +463,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       compilationStatus: compilation.status === "PASS" ? "PASS" : "FAIL",
       testStatus: tests.status,
       securityAnalysisStatus,
+      coverage,
     });
 
     const totalTests = tests.status === "PASS" || tests.status === "FAIL" ? tests.totalTests : null;
@@ -477,6 +489,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
         securityAnalysisStatus,
         gateReasons: risk.gateReasons,
         coverage,
+        evidenceVersion: 2,
         completedAt: new Date(),
       },
     });
@@ -492,6 +505,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           line: f.line,
           description: f.description,
           source: f.source,
+          scope: f.scope,
         })),
       });
     }

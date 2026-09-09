@@ -95,6 +95,14 @@ describe("discoverSolidityFiles", () => {
     ]);
   });
 
+  it("marks lib inside a nested project root as dependency", () => {
+    createFile("smart contracts/src/Vault.sol", "pragma solidity ^0.8.24;");
+    createFile("smart contracts/lib/forge-std/Test.sol", "pragma solidity ^0.8.24;");
+    const result = discoverSolidityFiles(TEST_DIR);
+    expect(result.firstPartyContracts).toEqual(["smart contracts/src/Vault.sol"]);
+    expect(result.dependencyContracts).toEqual(["smart contracts/lib/forge-std/Test.sol"]);
+  });
+
   it("returns empty arrays for no Solidity files", () => {
     createFile("README.md", "# Hello");
     const result = discoverSolidityFiles(TEST_DIR);

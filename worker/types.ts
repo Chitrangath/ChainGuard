@@ -107,6 +107,7 @@ export interface StaticAnalysisResultSuccess {
     line: number | null;
     description: string;
     source: string;
+    scope: "FIRST_PARTY" | "DEPENDENCY" | "GENERATED" | "UNKNOWN";
   }>;
   contractsScanned: number;
   tool: "SLITHER";

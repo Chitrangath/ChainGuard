@@ -43,6 +43,7 @@ model Analysis {
   securityAnalysisStatus  SecurityAnalysisStatus?
   gateReasons             String[]
   coverage                AnalysisCoverage?
+  evidenceVersion         Int?
 
   @@map("analyses")
 }
@@ -57,6 +58,7 @@ model Finding {
   line        Int?
   description String
   source      String
+  scope       FindingScope @default(UNKNOWN)
   createdAt   DateTime @default(now())
   analysis    Analysis @relation(fields: [analysisId], references: [id], onDelete: Cascade)
 
@@ -133,4 +135,13 @@ enum AnalysisCoverage {
   FAILED
 
   @@map("analysis_coverage")
+}
+
+enum FindingScope {
+  FIRST_PARTY
+  DEPENDENCY
+  GENERATED
+  UNKNOWN
+
+  @@map("finding_scope")
 }

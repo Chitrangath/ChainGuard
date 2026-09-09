@@ -20,6 +20,7 @@ export interface RiskInput {
   compilationStatus: CompilationStatus;
   testStatus: TestResult["status"] | CompilationStatus;
   securityAnalysisStatus?: SecurityAnalysisStatus;
+  coverage: "FULL" | "PARTIAL" | "FAILED";
 }
 
 export interface RiskResult {
@@ -33,17 +34,16 @@ function isScanTrustworthy(
   securityAnalysisStatus: SecurityAnalysisStatus | undefined,
   compilationStatus: CompilationStatus,
 ): boolean {
-  if (securityAnalysisStatus === "FAIL" || securityAnalysisStatus === "NOT_RUN") return false;
-  if (compilationStatus === "FAIL") return false;
-  return true;
+  return securityAnalysisStatus === "PASS" && compilationStatus === "PASS";
 }
 
 function buildGateReasons(
-  score: number,
+  score: number | null,
   criticalFindings: number,
   compilationStatus: CompilationStatus,
   testStatus: TestResult["status"] | CompilationStatus,
   securityAnalysisStatus: SecurityAnalysisStatus | undefined,
+  coverage: RiskInput["coverage"],
 ): GateReason[] {
   const reasons: GateReason[] = [];
 
@@ -61,7 +61,8 @@ function buildGateReasons(
   if (securityAnalysisStatus === "NO_CONTRACTS_FOUND") reasons.push("NO_CONTRACTS_FOUND");
 
   if (criticalFindings > 0) reasons.push("CRITICAL_FINDINGS");
-  if (score < 80) reasons.push("SCORE_BELOW_THRESHOLD");
+  if (coverage !== "FULL") reasons.push("INCOMPLETE_ANALYSIS");
+  if (score !== null && score < 80) reasons.push("SCORE_BELOW_THRESHOLD");
 
   return reasons;
 }
@@ -70,7 +71,7 @@ export function calculateRisk(input: RiskInput): RiskResult {
   const scanTrustworthy = isScanTrustworthy(
     input.securityAnalysisStatus,
     input.compilationStatus,
-  );
+  ) && input.coverage === "FULL";
 
   if (!scanTrustworthy) {
     return {
@@ -78,11 +79,12 @@ export function calculateRisk(input: RiskInput): RiskResult {
       deploymentStatus: "BLOCKED",
       criticalFindings: 0,
       gateReasons: buildGateReasons(
-        0,
+        null,
         0,
         input.compilationStatus,
         input.testStatus,
         input.securityAnalysisStatus,
+        input.coverage,
       ),
     };
   }
@@ -128,6 +130,7 @@ export function calculateRisk(input: RiskInput): RiskResult {
       input.compilationStatus,
       input.testStatus,
       input.securityAnalysisStatus,
+      input.coverage,
     ),
   };
 }

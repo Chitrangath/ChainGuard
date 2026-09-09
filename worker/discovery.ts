@@ -73,20 +73,13 @@ function isInWorkspace(resolved: string, repoRoot: string): boolean {
 }
 
 function isDependencyPath(relPath: string): boolean {
-  return relPath.startsWith("lib/") || relPath.startsWith("lib\\");
+  const segments = relPath.replaceAll("\\", "/").split("/");
+  return segments.includes("lib") || segments.includes("node_modules");
 }
 
 function isGeneratedPath(relPath: string): boolean {
-  return (
-    relPath.startsWith("out/") ||
-    relPath.startsWith("out\\") ||
-    relPath.startsWith("artifacts/") ||
-    relPath.startsWith("artifacts\\") ||
-    relPath.startsWith("build/") ||
-    relPath.startsWith("build\\") ||
-    relPath.startsWith("cache/") ||
-    relPath.startsWith("cache\\")
-  );
+  const segments = relPath.replaceAll("\\", "/").split("/");
+  return segments.some((part) => ["out", "artifacts", "build", "cache"].includes(part));
 }
 
 function walkDir(

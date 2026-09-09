@@ -7,6 +7,7 @@ function makeInput(overrides: Partial<RiskInput> = {}): RiskInput {
     compilationStatus: "PASS",
     testStatus: "PASS",
     securityAnalysisStatus: "PASS",
+    coverage: "FULL",
     ...overrides,
   };
 }

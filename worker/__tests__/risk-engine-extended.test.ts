@@ -7,6 +7,7 @@ function makeInput(overrides: Partial<RiskInput> = {}): RiskInput {
     compilationStatus: "PASS",
     testStatus: "PASS",
     securityAnalysisStatus: "PASS",
+    coverage: "FULL",
     ...overrides,
   };
 }
@@ -131,7 +132,11 @@ describe("calculateRisk", () => {
           securityAnalysisStatus: "FAIL",
         }),
       );
-      expect(result.gateReasons.length).toBeGreaterThanOrEqual(4);
+      expect(result.gateReasons).toEqual([
+        "COMPILATION_FAILED",
+        "NO_TESTS",
+        "STATIC_ANALYSIS_FAILED",
+      ]);
       expect(result.deploymentStatus).toBe("BLOCKED");
     });
 
@@ -191,6 +196,33 @@ describe("calculateRisk", () => {
   });
 
   describe("risk score unavailable", () => {
+    it("does not add a score-threshold reason when evidence is incomplete", () => {
+      const result = calculateRisk(
+        makeInput({ securityAnalysisStatus: "FAIL", coverage: "PARTIAL" }),
+      );
+      expect(result.riskScore).toBeNull();
+      expect(result.gateReasons).toEqual(["STATIC_ANALYSIS_FAILED", "INCOMPLETE_ANALYSIS"]);
+    });
+
+    it.each(["PARTIAL", "FAILED"] as const)(
+      "returns null riskScore when coverage is %s",
+      (coverage) => {
+        const result = calculateRisk(makeInput({ coverage }));
+        expect(result.riskScore).toBeNull();
+        expect(result.deploymentStatus).toBe("BLOCKED");
+        expect(result.gateReasons).toContain("INCOMPLETE_ANALYSIS");
+      },
+    );
+
+    it.each([undefined, "UNSUPPORTED", "NO_CONTRACTS_FOUND"] as const)(
+      "returns null riskScore when security evidence is %s",
+      (securityAnalysisStatus) => {
+        const result = calculateRisk(makeInput({ securityAnalysisStatus }));
+        expect(result.riskScore).toBeNull();
+        expect(result.deploymentStatus).toBe("BLOCKED");
+      },
+    );
+
     it("returns null riskScore when securityAnalysisStatus is FAIL", () => {
       const result = calculateRisk(
         makeInput({ securityAnalysisStatus: "FAIL" }),

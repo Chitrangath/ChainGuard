@@ -61,6 +61,41 @@ describe("parseSlitherOutput", () => {
     const findings = parseSlitherOutput(JSON.stringify(VALID_SLITHER_WITH_FINDINGS));
     expect(findings).toHaveLength(1);
     expect(findings[0].severity).toBe("CRITICAL");
+    expect(findings[0].scope).toBe("FIRST_PARTY");
+  });
+
+  it("attributes a mixed detector to first-party scope", () => {
+    const output = structuredClone(VALID_SLITHER_WITH_FINDINGS);
+    output.results.detectors[0].elements.unshift({
+      type: "contract",
+      name: "Dependency",
+      source_mapping: {
+        filename_relative: "lib/dependency/Dependency.sol",
+        start: 0,
+        length: 1,
+        lines: [1],
+      },
+    });
+    expect(parseSlitherOutput(JSON.stringify(output))[0].scope).toBe("FIRST_PARTY");
+  });
+
+  it.each([
+    ["lib/openzeppelin/Ownable.sol", "DEPENDENCY"],
+    ["out/Vault.sol", "GENERATED"],
+    ["artifacts/Vault.json", "GENERATED"],
+  ])("attributes %s as %s", (file, expectedScope) => {
+    const output = structuredClone(VALID_SLITHER_WITH_FINDINGS);
+    output.results.detectors[0].elements = [{
+      type: "contract",
+      name: "ScopedContract",
+      source_mapping: {
+        filename_relative: file,
+        start: 0,
+        length: 1,
+        lines: [1],
+      },
+    }];
+    expect(parseSlitherOutput(JSON.stringify(output))[0].scope).toBe(expectedScope);
   });
 
   it("returns empty array for invalid JSON (parse failure)", () => {
