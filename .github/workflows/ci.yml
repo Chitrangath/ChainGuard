@@ -101,3 +101,23 @@ jobs:
         env:
           DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/chainguard_test?schema=public"
           REDIS_URL: "redis://localhost:6379"
+
+      - name: Run real analyzer regression flows
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/chainguard_test?schema=public"
+          REDIS_URL: "redis://localhost:6379"
+        run: |
+          set -euo pipefail
+          npm run dev > /tmp/chainguard-ci-app.log 2>&1 &
+          app_pid=$!
+          npm run worker > /tmp/chainguard-ci-worker.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$app_pid" "$worker_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            curl -fsS http://localhost:3000 >/dev/null && break
+            sleep 2
+          done
+          RUN_REAL_ANALYZER=1 npx vitest run worker/__tests__/real-analyzer.integration.test.ts
+          E2E_MODE=fixture E2E_TEST_REPO_URL=https://github.com/Chitrangath/ChainGuard bash scripts/e2e-test.sh
+          E2E_MODE=terralink E2E_TEST_REPO_URL=https://github.com/Chitrangath/TerraLink-RealEstate-Using-Blockchain bash scripts/e2e-test.sh
+          E2E_MODE=no-contract E2E_TEST_REPO_URL=https://github.com/octocat/Hello-World bash scripts/e2e-test.sh
