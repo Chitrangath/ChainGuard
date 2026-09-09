@@ -2,7 +2,21 @@ import type { SubmoduleValidationResult } from "./types";
 
 export interface GitmodulesEntry {
   name: string;
+  path: string;
   url: string;
+}
+
+function validateSubmodulePath(value: string): { valid: boolean; normalized: string; reason?: string } {
+  const candidate = value.trim().replaceAll("\\", "/");
+  if (!candidate) return { valid: false, normalized: "", reason: "Submodule path is required" };
+  if (candidate.startsWith("/") || /^[A-Za-z]:\//.test(candidate)) {
+    return { valid: false, normalized: candidate, reason: "Submodule path must be relative" };
+  }
+  const parts = candidate.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) {
+    return { valid: false, normalized: candidate, reason: "Submodule path must be normalized without traversal" };
+  }
+  return { valid: true, normalized: parts.join("/") };
 }
 
 const MAX_SUBMODULES = 20;
@@ -128,11 +142,18 @@ export function validateAllSubmodules(
 
   const urls: SubmoduleValidationResult["urls"] = [];
   const rejected: SubmoduleValidationResult["rejected"] = [];
+  const seenPaths = new Set<string>();
 
   for (const entry of entries) {
+    const pathResult = validateSubmodulePath(entry.path);
+    if (!pathResult.valid || seenPaths.has(pathResult.normalized)) {
+      rejected.push({ name: entry.name, url: entry.url, reason: pathResult.reason ?? "Duplicate submodule path" });
+      continue;
+    }
+    seenPaths.add(pathResult.normalized);
     const result = validateSubmoduleUrl(entry.url, parentRepoUrl);
     if (result.valid) {
-      urls.push({ name: entry.name, resolvedUrl: result.resolvedUrl, valid: true });
+      urls.push({ name: entry.name, path: pathResult.normalized, resolvedUrl: result.resolvedUrl, valid: true });
     } else {
       rejected.push({ name: entry.name, url: entry.url, reason: result.reason ?? "Invalid URL" });
     }
@@ -155,10 +176,12 @@ export function parseGitmodules(content: string): GitmodulesEntry[] {
     const submoduleMatch = trimmed.match(/^\[submodule\s+"([^"]+)"\]$/);
     if (submoduleMatch) {
       if (current) entries.push(current);
-      current = { name: submoduleMatch[1], url: "" };
+      current = { name: submoduleMatch[1], path: "", url: "" };
       continue;
     }
     if (current) {
+      const pathMatch = trimmed.match(/^path\s*=\s*(.+)$/);
+      if (pathMatch) current.path = pathMatch[1].trim();
       const urlMatch = trimmed.match(/^url\s*=\s*(.+)$/);
       if (urlMatch) {
         current.url = urlMatch[1].trim();

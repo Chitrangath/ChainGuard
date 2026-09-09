@@ -167,7 +167,7 @@ export interface DiscoveryResult {
 
 export interface SubmoduleValidationResult {
   valid: boolean;
-  urls: Array<{ name: string; resolvedUrl: string; valid: boolean }>;
+  urls: Array<{ name: string; path: string; resolvedUrl: string; valid: boolean }>;
   rejected: Array<{ name: string; url: string; reason: string }>;
   reason?: string;
 }

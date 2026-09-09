@@ -18,7 +18,7 @@ describe("parsePragma", () => {
 
   it("parses range pragma", () => {
     const result = parsePragma("pragma solidity >=0.8.0 <0.9.0;");
-    expect(result).toEqual([">=0.8.0", "<0.9.0"]);
+    expect(result).toEqual([">=0.8.0 <0.9.0"]);
   });
 
   it("returns empty array for no pragma", () => {
@@ -95,7 +95,17 @@ describe("selectCompiler", () => {
   });
 
   it("selects lowest compatible for range pragma", () => {
-    const result = selectCompiler([">=0.8.0", "<0.9.0"], availableCompilers);
+    const result = selectCompiler([">=0.8.0 <0.9.0"], availableCompilers);
     expect(result.version).toBe("0.8.20");
+  });
+
+  it("requires one compiler to satisfy every source constraint", () => {
+    expect(selectCompiler(["^0.8.20", "0.8.24"], availableCompilers).version).toBe("0.8.24");
+    expect(selectCompiler(["0.8.20", "0.8.24"], availableCompilers).version).toBe("UNSUPPORTED");
+  });
+
+  it("supports bounded ranges and missing pragmas", () => {
+    expect(selectCompiler([">=0.8.21 <0.9.0"], availableCompilers).version).toBe("0.8.24");
+    expect(selectCompiler([], availableCompilers).version).toBe("0.8.20");
   });
 });

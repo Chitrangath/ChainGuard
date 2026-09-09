@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   validateSubmoduleUrl,
   validateAllSubmodules,
+  parseGitmodules,
   type GitmodulesEntry,
 } from "../submodule";
 
@@ -98,10 +99,10 @@ describe("validateSubmoduleUrl", () => {
 describe("validateAllSubmodules", () => {
   it("validates multiple submodules", () => {
     const entries: GitmodulesEntry[] = [
-      { name: "forge-std", url: "https://github.com/foundry-rs/forge-std.git" },
+      { name: "forge-std", path: "lib/forge-std", url: "https://github.com/foundry-rs/forge-std.git" },
       {
         name: "openzeppelin",
-        url: "https://github.com/OpenZeppelin/openzeppelin-contracts.git",
+        path: "lib/openzeppelin-contracts", url: "https://github.com/OpenZeppelin/openzeppelin-contracts.git",
       },
     ];
     const result = validateAllSubmodules(entries, "https://github.com/user/repo");
@@ -112,8 +113,8 @@ describe("validateAllSubmodules", () => {
 
   it("rejects when any submodule is invalid", () => {
     const entries: GitmodulesEntry[] = [
-      { name: "forge-std", url: "https://github.com/foundry-rs/forge-std.git" },
-      { name: "bad", url: "file:///etc/passwd" },
+      { name: "forge-std", path: "lib/forge-std", url: "https://github.com/foundry-rs/forge-std.git" },
+      { name: "bad", path: "lib/bad", url: "file:///etc/passwd" },
     ];
     const result = validateAllSubmodules(entries, "https://github.com/user/repo");
     expect(result.valid).toBe(false);
@@ -124,6 +125,7 @@ describe("validateAllSubmodules", () => {
   it("rejects too many submodules", () => {
     const entries: GitmodulesEntry[] = Array.from({ length: 25 }, (_, i) => ({
       name: `sub${i}`,
+      path: `lib/sub${i}`,
       url: `https://github.com/user/sub${i}.git`,
     }));
     const result = validateAllSubmodules(entries, "https://github.com/user/repo");
@@ -133,13 +135,33 @@ describe("validateAllSubmodules", () => {
 
   it("handles relative URLs in entries", () => {
     const entries: GitmodulesEntry[] = [
-      { name: "std", url: "../forge-std.git" },
+      { name: "std", path: "lib/forge-std", url: "../forge-std.git" },
     ];
     const result = validateAllSubmodules(entries, "https://github.com/user/repo");
     expect(result.valid).toBe(true);
     expect(result.urls[0].resolvedUrl).toBe(
       "https://github.com/user/forge-std.git",
     );
+  });
+
+  it("parses section name, path, and URL for TerraLink-style entries", () => {
+    expect(parseGitmodules(`[submodule "forge-std"]\n path = smart contracts/lib/forge-std\n url = https://github.com/foundry-rs/forge-std.git\n`)).toEqual([
+      { name: "forge-std", path: "smart contracts/lib/forge-std", url: "https://github.com/foundry-rs/forge-std.git" },
+    ]);
+  });
+
+  it.each(["", "../outside", "/tmp/module", "lib/../outside"])("rejects invalid submodule path %j", (path) => {
+    const result = validateAllSubmodules([{ name: "bad", path, url: "https://github.com/user/repo.git" }], "https://github.com/user/parent");
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects duplicate paths and malformed entries", () => {
+    const url = "https://github.com/user/repo.git";
+    expect(validateAllSubmodules([
+      { name: "one", path: "lib/shared", url },
+      { name: "two", path: "lib/shared", url },
+    ], "https://github.com/user/parent").valid).toBe(false);
+    expect(validateAllSubmodules([{ name: "bad", path: "lib/bad", url: "" }], "https://github.com/user/parent").valid).toBe(false);
   });
 
   it("handles empty entries", () => {

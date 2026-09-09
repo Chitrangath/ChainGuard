@@ -242,6 +242,20 @@ describe("calculateRisk", () => {
       expect(result.riskScore).toBeNull();
     });
 
+    it("reports an unsupported compiler exactly", () => {
+      const result = calculateRisk(makeInput({
+        compilationStatus: "UNSUPPORTED",
+        testStatus: "NOT_RUN",
+        securityAnalysisStatus: "NOT_RUN",
+        coverage: "FAILED",
+      }));
+      expect(result.riskScore).toBeNull();
+      expect(result.deploymentStatus).toBe("BLOCKED");
+      expect(result.gateReasons).toEqual([
+        "COMPILATION_UNSUPPORTED", "TESTS_NOT_RUN", "STATIC_ANALYSIS_NOT_RUN", "INCOMPLETE_ANALYSIS",
+      ]);
+    });
+
     it("returns available score when compilation PASS, tests PASS, scan PASS", () => {
       const result = calculateRisk(makeInput());
       expect(result.riskScore).toBe(100);

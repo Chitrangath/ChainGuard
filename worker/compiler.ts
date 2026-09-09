@@ -9,9 +9,15 @@ function parseVersion(v: string): number[] {
   return v.split(".").map(Number);
 }
 
-function versionSatisfiesRange(version: string, range: string): boolean {
+function compareVersions(left: string, right: string): number {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  return (a[0] - b[0]) || (a[1] - b[1]) || (a[2] - b[2]);
+}
+
+function versionSatisfiesToken(version: string, token: string): boolean {
   const ver = parseVersion(version);
-  const rangeClean = range.trim();
+  const rangeClean = token.trim();
 
   if (rangeClean.startsWith("^")) {
     const target = parseVersion(rangeClean.slice(1));
@@ -21,31 +27,28 @@ function versionSatisfiesRange(version: string, range: string): boolean {
     return ver[2] >= target[2];
   }
 
-  if (rangeClean.startsWith(">=") && rangeClean.includes("<")) {
-    const [gteStr, ltStr] = rangeClean.split(/\s+/);
-    const gte = parseVersion(gteStr.replace(">=", ""));
-    const lt = parseVersion(ltStr.replace("<", ""));
-    const verNum = ver[0] * 10000 + ver[1] * 100 + ver[2];
-    const gteNum = gte[0] * 10000 + gte[1] * 100 + gte[2];
-    const ltNum = lt[0] * 10000 + lt[1] * 100 + lt[2];
-    return verNum >= gteNum && verNum < ltNum;
-  }
-
   if (rangeClean.startsWith(">=")) {
-    const target = parseVersion(rangeClean.slice(2));
-    const verNum = ver[0] * 10000 + ver[1] * 100 + ver[2];
-    const targetNum = target[0] * 10000 + target[1] * 100 + target[2];
-    return verNum >= targetNum;
+    return compareVersions(version, rangeClean.slice(2)) >= 0;
+  }
+  if (rangeClean.startsWith("<=")) {
+    return compareVersions(version, rangeClean.slice(2)) <= 0;
+  }
+  if (rangeClean.startsWith(">")) {
+    return compareVersions(version, rangeClean.slice(1)) > 0;
   }
 
   if (rangeClean.startsWith("<")) {
-    const target = parseVersion(rangeClean.slice(1));
-    const verNum = ver[0] * 10000 + ver[1] * 100 + ver[2];
-    const targetNum = target[0] * 10000 + target[1] * 100 + target[2];
-    return verNum < targetNum;
+    return compareVersions(version, rangeClean.slice(1)) < 0;
   }
 
   return version === rangeClean;
+}
+
+function versionSatisfiesExpression(version: string, expression: string): boolean {
+  return expression.split("||").some((alternative) => {
+    const tokens = alternative.trim().split(/\s+/).filter(Boolean);
+    return tokens.length > 0 && tokens.every((token) => versionSatisfiesToken(version, token));
+  });
 }
 
 export function parsePragma(sourceContent: string): string[] {
@@ -55,8 +58,7 @@ export function parsePragma(sourceContent: string): string[] {
   while ((match = pragmaRegex.exec(sourceContent)) !== null) {
     const constraint = match[1].trim();
     if (constraint && !constraint.includes("abicoder")) {
-      const parts = constraint.split(/\s+/);
-      pragmas.push(...parts);
+      pragmas.push(constraint);
     }
   }
   return pragmas;
@@ -124,7 +126,7 @@ export function selectCompiler(
   let bestVersion: number[] = [Infinity, Infinity, Infinity];
 
   for (const availableVer of availableVersions) {
-    const satisfies = pragmas.some((pragma) => versionSatisfiesRange(availableVer, pragma));
+    const satisfies = pragmas.every((pragma) => versionSatisfiesExpression(availableVer, pragma));
     if (satisfies) {
       const ver = parseVersion(availableVer);
       if (

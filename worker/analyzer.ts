@@ -175,32 +175,36 @@ async function gitClone(
 async function initSubmodules(
   repoDir: string,
   parentRepoUrl: string,
-): Promise<void> {
+): Promise<{ success: boolean; reason?: string }> {
   const gitmodulesPath = path.join(repoDir, ".gitmodules");
-  if (!fs.existsSync(gitmodulesPath)) return;
+  if (!fs.existsSync(gitmodulesPath)) return { success: true };
 
   const content = fs.readFileSync(gitmodulesPath, "utf-8");
   const entries = parseGitmodules(content);
-  if (entries.length === 0) return;
+  if (entries.length === 0) return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
 
   const validation = validateAllSubmodules(entries, parentRepoUrl);
   if (!validation.valid) {
-    console.log(`[analyzer] Submodule validation failed: ${validation.rejected.map((r) => r.reason).join(", ")}`);
-    return;
+    return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
   }
 
   for (const sub of validation.urls) {
-    const subPath = path.join(repoDir, sub.name);
-    await runCommand(
+    const subPath = path.join(repoDir, sub.path);
+    if (fs.existsSync(subPath) && fs.lstatSync(subPath).isSymbolicLink()) {
+      return { success: false, reason: "SUBMODULE_PATH_INVALID" };
+    }
+    const result = await runCommand(
       "git",
       [
         "-c", "protocol.file.allow=never",
         "submodule", "update", "--init", "--depth", "1",
-        "--single-branch", sub.name,
+        "--single-branch", sub.path,
       ],
       { cwd: repoDir, timeout: CLONE_TIMEOUT_MS },
     );
+    if (result.exitCode !== 0) return { success: false, reason: "SUBMODULE_CHECKOUT_FAILED" };
   }
+  return { success: true };
 }
 
 function classifyProject(repoDir: string, discovery: ReturnType<typeof discoverSolidityFiles>): ProjectType {
@@ -264,6 +268,9 @@ function buildCompilerSelection(
       const pragmas: string[] = [];
       if (config.solcVersion) {
         pragmas.push(config.solcVersion);
+      }
+      for (const relPath of sourcePaths) {
+        try { pragmas.push(...parsePragma(fs.readFileSync(path.join(repoDir, relPath), "utf-8"))); } catch { continue; }
       }
       const selection = selectCompiler(pragmas);
       selection.viaIr = config.viaIr;
@@ -340,7 +347,16 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
       throw new Error(`Clone failed: ${cloneResult.stderr}`);
     }
 
-    await initSubmodules(repoDir, ctx.repositoryUrl);
+    const submodules = await initSubmodules(repoDir, ctx.repositoryUrl);
+    if (!submodules.success) {
+      await db.analysis.update({ where: { id: ctx.analysisId }, data: {
+        status: "COMPLETED", compilationStatus: "NOT_RUN", testStatus: "NOT_RUN",
+        securityAnalysisStatus: "NOT_RUN", riskScore: null, deploymentStatus: "BLOCKED",
+        coverage: "PARTIAL", gateReasons: [submodules.reason ?? "SUBMODULE_PREPARATION_FAILED"],
+        evidenceVersion: 2, completedAt: new Date(),
+      }});
+      return { success: true };
+    }
 
     await db.analysis.update({
       where: { id: ctx.analysisId },
@@ -460,7 +476,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
 
     const risk = calculateRisk({
       severityCounts,
-      compilationStatus: compilation.status === "PASS" ? "PASS" : "FAIL",
+      compilationStatus: compilation.status,
       testStatus: tests.status,
       securityAnalysisStatus,
       coverage,
