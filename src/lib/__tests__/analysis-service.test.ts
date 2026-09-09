@@ -90,6 +90,10 @@ describe("analysis-service", () => {
         riskScore: null,
         deploymentStatus: "BLOCKED",
         evidenceStatus: "LEGACY_UNVERIFIED",
+        compilationStatus: null,
+        testStatus: null,
+        securityAnalysisStatus: null,
+        gateReasons: ["INCOMPLETE_ANALYSIS"],
       });
     });
 
