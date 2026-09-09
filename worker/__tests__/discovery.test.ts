@@ -185,6 +185,14 @@ describe("discoverSolidityFiles", () => {
     expect(result.rejected).toHaveLength(2);
   });
 
+  it("does not claim incomplete source coverage for deep non-source directories", () => {
+    createFile("docs/deep/beyond/limit/README.md", "documentation");
+    createFile("src/Vault.sol", "pragma solidity ^0.8.20;");
+    const result = discoverSolidityFiles(TEST_DIR, { maxDepth: 1 });
+    expect(result.reasonCodes).toEqual([]);
+    expect(result.firstPartyContracts).toEqual(["src/Vault.sol"]);
+  });
+
   it("handles empty directory", () => {
     const result = discoverSolidityFiles(TEST_DIR);
     expect(result.firstPartyContracts).toEqual([]);

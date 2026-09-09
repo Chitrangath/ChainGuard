@@ -88,6 +88,24 @@ function reject(result: DiscoveryResult, filePath: string, reason: string) {
   result.rejected.push({ filePath, reason, scope });
 }
 
+function mayContainSolidity(dir: string, budget = 1000): boolean {
+  const pending = [dir];
+  let inspected = 0;
+  while (pending.length > 0) {
+    const current = pending.pop()!;
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      inspected++;
+      if (inspected > budget) return true;
+      if (entry.isSymbolicLink()) continue;
+      if (entry.isFile() && entry.name.endsWith(".sol")) return true;
+      if (entry.isDirectory() && !isExcludedDir(entry.name)) pending.push(path.join(current, entry.name));
+    }
+  }
+  return false;
+}
+
 function walkDir(
   dir: string,
   repoRoot: string,
@@ -98,7 +116,7 @@ function walkDir(
   forcedGenerated = false,
 ): number {
   if (depth > opts.maxDepth) {
-    reject(result, path.relative(repoRoot, dir), "max_depth_exceeded");
+    if (mayContainSolidity(dir)) reject(result, path.relative(repoRoot, dir), "max_depth_exceeded");
     return currentTotalSize;
   }
 

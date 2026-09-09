@@ -58,6 +58,18 @@ if (mode === "no-contract") {
   assert.equal(result.deploymentStatus, "BLOCKED");
   assert.equal(result.securityAnalysisStatus, "NO_CONTRACTS_FOUND");
   assert.deepEqual(result.gateReasons, ["NO_CONTRACTS_FOUND"]);
+  console.log(JSON.stringify({
+    analysisId: result.id, mode, riskScore: result.riskScore,
+    deploymentStatus: result.deploymentStatus,
+    securityAnalysisStatus: result.securityAnalysisStatus,
+    firstPartySourcesDiscovered: result.firstPartySourcesDiscovered,
+    dependencySourcesDiscovered: result.dependencySourcesDiscovered,
+    generatedSourcesDiscovered: result.generatedSourcesDiscovered,
+    firstPartySourcesTargeted: result.firstPartySourcesTargeted,
+    sourcesRejected: result.sourcesRejected,
+    discoveryReasons: result.discoveryReasons,
+    gateReasons: result.gateReasons,
+  }, null, 2));
 } else {
   assert.equal(result.compilationStatus, "PASS");
   assert.equal(result.testStatus, "PASS");
