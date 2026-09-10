@@ -107,6 +107,15 @@ describe("discoverSolidityFiles", () => {
     expect(result.dependencyContracts).toEqual(["smart contracts/lib/forge-std/Test.sol"]);
   });
 
+  it("does not treat dependency Foundry packages as first-party project roots", () => {
+    createFile("app/foundry.toml", "[profile.default]");
+    createFile("app/src/Vault.sol", "pragma solidity 0.8.24;");
+    createFile("app/lib/dependency/foundry.toml", "[profile.default]");
+    createFile("app/lib/dependency/src/Dependency.sol", "pragma solidity 0.8.24;");
+    const result = discoverSolidityFiles(TEST_DIR);
+    expect(result.projectRoots).toEqual([path.join(TEST_DIR, "app")]);
+  });
+
   it("returns empty arrays for no Solidity files", () => {
     createFile("README.md", "# Hello");
     const result = discoverSolidityFiles(TEST_DIR);

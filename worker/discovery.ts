@@ -249,7 +249,6 @@ export function discoverSolidityFiles(
 
   result.projectRoots = findProjectRoots(repoDir, [
     ...result.firstPartyContracts,
-    ...result.dependencyContracts,
   ]);
   result.reasonCodes = [...new Set(result.rejected.map((item) => item.reason))].sort();
 
