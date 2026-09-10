@@ -98,10 +98,7 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
   const isTerminal =
     analysis.status === "COMPLETED" || analysis.status === "FAILED";
 
-  const hasTrustworthyScan =
-    analysis.securityAnalysisStatus === "PASS" ||
-    (analysis.securityAnalysisStatus !== "FAIL" &&
-      analysis.securityAnalysisStatus !== "NOT_RUN");
+  const hasTrustworthyScan = analysis.securityAnalysisStatus === "PASS";
 
   const gateReasonLabels = formatGateReasons(analysis.gateReasons ?? []);
 
@@ -209,9 +206,13 @@ export function AnalysisSummary({ analysis }: AnalysisSummaryProps) {
 
           {/* Metadata row */}
           <div className="mt-4 flex flex-wrap items-center gap-4 border-t pt-4" style={{ borderColor: "var(--color-border)" }}>
-            <div className="text-body">
-              <span className="font-semibold">{totalFindings}</span> finding{totalFindings !== 1 ? "s" : ""}
-            </div>
+            {hasTrustworthyScan ? (
+              <div className="text-body">
+                <span className="font-semibold">{totalFindings}</span> finding{totalFindings !== 1 ? "s" : ""}
+              </div>
+            ) : (
+              <div className="text-body">Findings unavailable</div>
+            )}
             {duration && (
               <div className="text-metadata">Duration: {duration}</div>
             )}
