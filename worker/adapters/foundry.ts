@@ -1,11 +1,12 @@
 import * as fs from "fs";
 import * as path from "path";
-import { runBoundedProcess, type ProcessResult } from "../process-runner";
+import { ANALYSIS_WORKSPACE_LIMIT, runBoundedProcess, type ProcessResult } from "../process-runner";
 import type {
   CompilationResult,
   TestResult,
   AnalysisTarget,
 } from "../types";
+import { classifyAnalyzerProcessFailure } from "../retry-policy";
 
 const TOOL_TIMEOUT_MS = 120_000;
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
@@ -43,7 +44,7 @@ export async function dockerRun(
     ...command,
   ];
 
-  const result = await runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS, signal });
+  const result = await runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS, signal, workspacePath: workspaceDir });
   if (result.reasonCode) await runBoundedProcess("docker", ["rm", "-f", containerName], { timeoutMs: 10_000 });
   return result;
 }
@@ -51,9 +52,14 @@ export async function dockerRun(
 async function runCommand(
   cmd: string,
   args: string[],
-  opts: { cwd?: string; timeout?: number; signal?: AbortSignal } = {},
+  opts: { cwd?: string; timeout?: number; signal?: AbortSignal; workspacePath?: string } = {},
 ): Promise<ProcessResult> {
-  return runBoundedProcess(cmd, args, { cwd: opts.cwd, timeoutMs: opts.timeout ?? TOOL_TIMEOUT_MS, signal: opts.signal });
+  return runBoundedProcess(cmd, args, {
+    cwd: opts.cwd,
+    timeoutMs: opts.timeout ?? TOOL_TIMEOUT_MS,
+    signal: opts.signal,
+    workspace: opts.workspacePath ? { path: opts.workspacePath, ...ANALYSIS_WORKSPACE_LIMIT } : undefined,
+  });
 }
 
 export async function foundryCompile(
@@ -76,7 +82,7 @@ export async function foundryCompile(
   if (result.exitCode !== 0) {
     return {
       status: "FAIL",
-      reasonCode: result.reasonCode ?? "FORGE_BUILD_FAILED",
+      reasonCode: classifyAnalyzerProcessFailure(result, "FORGE_BUILD_FAILED"),
       safeMessage: "Forge compilation failed",
     };
   }
@@ -116,6 +122,13 @@ export async function foundryTest(
   const testOutput = result.stdout + result.stderr;
   const counts = parseForgeTestOutput(testOutput);
 
+  if (result.exitCode !== 0) {
+    const reasonCode = classifyAnalyzerProcessFailure(result, "FORGE_TEST_ERROR");
+    if (reasonCode !== "FORGE_TEST_ERROR") {
+      return { status: "ERROR", reasonCode, safeMessage: "Analyzer runtime unavailable" };
+    }
+  }
+
   const executed =
     (counts.passedTests !== null && counts.passedTests > 0) ||
     (counts.failedTests !== null && counts.failedTests > 0) ||
@@ -134,7 +147,7 @@ export async function foundryTest(
   }
 
   if (result.exitCode !== 0) {
-    return { status: "ERROR", reasonCode: result.reasonCode ?? "FORGE_TEST_ERROR", safeMessage: "Forge test exited with error" };
+    return { status: "ERROR", reasonCode: "FORGE_TEST_ERROR", safeMessage: "Forge test exited with error" };
   }
 
   return { status: "PASS", totalTests: total, passedTests: passed, failedTests: 0 };

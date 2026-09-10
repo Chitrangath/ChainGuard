@@ -1,7 +1,7 @@
 import type { SubmoduleValidationResult } from "./types";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { runBoundedProcess, type ProcessResult } from "./process-runner";
+import { ANALYSIS_WORKSPACE_LIMIT, runBoundedProcess, type ProcessResult } from "./process-runner";
 
 export interface GitmodulesEntry {
   name: string;
@@ -206,7 +206,12 @@ export async function prepareSubmodules(repoDir: string, parentRepoUrl: string, 
   if (entries.length === 0) return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
   const validation = validateAllSubmodules(entries, parentRepoUrl);
   if (!validation.valid) return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
-  const execute = options.run ?? ((cmd, args) => runBoundedProcess(cmd, args, { cwd: repoDir, timeoutMs: 60_000, signal: options.signal }));
+  const execute = options.run ?? ((cmd, args) => runBoundedProcess(cmd, args, {
+    cwd: repoDir,
+    timeoutMs: 60_000,
+    signal: options.signal,
+    workspace: { path: repoDir, ...ANALYSIS_WORKSPACE_LIMIT },
+  }));
   const realRepo = fs.realpathSync(repoDir);
   for (const submodule of validation.urls) {
     const target = path.join(repoDir, submodule.path);

@@ -86,6 +86,7 @@ describe("runAnalysis", () => {
     projectId: "test-project-id",
     repositoryUrl: "https://github.com/example/repo",
     projectDir: "/tmp/test",
+    executionToken: "test-attempt",
   };
 
   it("rejects invalid repository URLs", async () => {

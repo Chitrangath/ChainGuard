@@ -1,10 +1,11 @@
 import * as fs from "fs";
 import * as path from "path";
-import { runBoundedProcess } from "../process-runner";
+import { ANALYSIS_WORKSPACE_LIMIT, runBoundedProcess } from "../process-runner";
 import type {
   CompilationResult,
   AnalysisTarget,
 } from "../types";
+import { classifyAnalyzerProcessFailure } from "../retry-policy";
 
 const TOOL_TIMEOUT_MS = 120_000;
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
@@ -191,10 +192,11 @@ export async function standaloneCompile(
 
     const processResult = await runBoundedProcess("docker", dockerArgs, {
       timeoutMs: TOOL_TIMEOUT_MS, signal: target.signal, stdin: inputJson,
+      workspace: { path: workspaceDir, ...ANALYSIS_WORKSPACE_LIMIT },
     });
     if (processResult.exitCode !== 0) {
       if (processResult.reasonCode) await runBoundedProcess("docker", ["rm", "-f", containerName], { timeoutMs: 10_000 });
-      return { status: "FAIL", reasonCode: processResult.reasonCode ?? "COMPILER_EXECUTION_FAILED", safeMessage: "Compiler execution failed safely" };
+      return { status: "FAIL", reasonCode: classifyAnalyzerProcessFailure(processResult, "COMPILER_EXECUTION_FAILED"), safeMessage: "Compiler execution failed safely" };
     }
     const stdout = processResult.stdout;
 

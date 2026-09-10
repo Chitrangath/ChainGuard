@@ -59,6 +59,7 @@ model Analysis {
   terminalReason          String?
   projectRootsDiscovered  Int?
   projectRootsAnalyzed    Int?
+  executionToken          String?                  @db.VarChar(64)
 
   @@index([status, nextAttemptAt, createdAt])
   @@map("analyses")

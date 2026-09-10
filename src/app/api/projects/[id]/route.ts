@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { handleApiError } from "@/lib/api-error";
-import { presentEvidence } from "@/lib/evidence";
+import { presentAnalysisSignals, presentEvidence } from "@/lib/evidence";
 
 export async function GET(
   _request: NextRequest,
@@ -33,6 +33,16 @@ export async function GET(
     const latestEvidence = latest
       ? presentEvidence(latest.evidenceVersion, latest.riskScore, latest.deploymentStatus)
       : null;
+    const latestSignals = latest
+      ? presentAnalysisSignals(latest.evidenceVersion, {
+          compilationStatus: latest.compilationStatus,
+          testStatus: latest.testStatus,
+          totalTests: latest.totalTests,
+          passedTests: latest.passedTests,
+          failedTests: latest.failedTests,
+          findingCount: latest.findings.length,
+        })
+      : null;
 
     return NextResponse.json({
       id: project.id,
@@ -48,15 +58,16 @@ export async function GET(
             riskScore: latestEvidence?.riskScore ?? null,
             deploymentStatus: latestEvidence?.deploymentStatus ?? null,
             evidenceStatus: latestEvidence?.evidenceStatus,
-            compilationStatus: latest.compilationStatus,
-            testStatus: latest.testStatus,
-            totalTests: latest.totalTests,
-            passedTests: latest.passedTests,
-            failedTests: latest.failedTests,
+            compilationStatus: latestSignals?.compilationStatus ?? null,
+            testStatus: latestSignals?.testStatus ?? null,
+            totalTests: latestSignals?.totalTests ?? null,
+            passedTests: latestSignals?.passedTests ?? null,
+            failedTests: latestSignals?.failedTests ?? null,
+            findingCount: latestSignals?.findingCount ?? null,
             startedAt: latest.startedAt?.toISOString() ?? null,
             completedAt: latest.completedAt?.toISOString() ?? null,
             createdAt: latest.createdAt.toISOString(),
-            findings: latest.findings.map((f) => ({
+            findings: latestEvidence?.evidenceStatus === "VERIFIED" ? latest.findings.map((f) => ({
               id: f.id,
               severity: f.severity,
               type: f.type,
@@ -66,7 +77,7 @@ export async function GET(
               description: f.description,
               source: f.source,
               scope: f.scope,
-            })),
+            })) : [],
           }
         : null,
       analysisHistory: history.map((a) => ({

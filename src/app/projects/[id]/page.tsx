@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { AnalysisView } from "@/components/AnalysisView";
-import { presentEvidence, type EvidenceStatus } from "@/lib/evidence";
+import { presentAnalysisSignals, presentEvidence, type EvidenceStatus } from "@/lib/evidence";
 
 export const dynamic = "force-dynamic";
 
@@ -348,15 +348,17 @@ export default async function ProjectPage({
           id: a.id,
           status: a.status,
           ...presentEvidence(a.evidenceVersion, a.riskScore, a.deploymentStatus),
-          compilationStatus: a.compilationStatus,
-          testStatus: a.testStatus,
-          totalTests: a.totalTests,
-          passedTests: a.passedTests,
-          failedTests: a.failedTests,
+          ...presentAnalysisSignals(a.evidenceVersion, {
+            compilationStatus: a.compilationStatus,
+            testStatus: a.testStatus,
+            totalTests: a.totalTests,
+            passedTests: a.passedTests,
+            failedTests: a.failedTests,
+            findingCount: a._count.findings,
+          }),
           startedAt: a.startedAt?.toISOString() ?? null,
           completedAt: a.completedAt?.toISOString() ?? null,
           createdAt: a.createdAt.toISOString(),
-          findingCount: a._count.findings,
           projectType: a.projectType ?? null,
           compilerVersion: a.compilerVersion ?? null,
           contractsDiscovered: a.contractsDiscovered ?? null,

@@ -21,7 +21,7 @@ export interface AnalysisResult {
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
-  findingCount: number;
+  findingCount: number | null;
   projectType: string | null;
   compilerVersion: string | null;
   contractsDiscovered: number | null;
@@ -127,7 +127,7 @@ function mapAnalysisToResult(
     startedAt: analysis.startedAt?.toISOString() ?? null,
     completedAt: analysis.completedAt?.toISOString() ?? null,
     createdAt: analysis.createdAt.toISOString(),
-    findingCount: findingCount ?? analysis._count?.findings ?? analysis.findings?.length ?? 0,
+    findingCount: legacy ? null : findingCount ?? analysis._count?.findings ?? analysis.findings?.length ?? 0,
     projectType: legacy ? null : analysis.projectType ?? null,
     compilerVersion: legacy ? null : analysis.compilerVersion ?? null,
     contractsDiscovered: legacy ? null : analysis.contractsDiscovered ?? null,
@@ -171,7 +171,7 @@ function cachedToResult(cached: CachedAnalysis): AnalysisResult {
     startedAt: cached.startedAt,
     completedAt: cached.completedAt,
     createdAt: cached.createdAt,
-    findingCount: cached.findingCount ?? cached.findings.length,
+    findingCount: legacy ? null : cached.findingCount ?? cached.findings.length,
     projectType: legacy ? null : cached.projectType ?? null,
     compilerVersion: legacy ? null : cached.compilerVersion ?? null,
     contractsDiscovered: legacy ? null : cached.contractsDiscovered ?? null,
@@ -254,6 +254,13 @@ export async function getAnalysisWithFindings(
   });
 
   if (!analysis) return null;
+  if (presentEvidence(analysis.evidenceVersion, analysis.riskScore, analysis.deploymentStatus).evidenceStatus === "LEGACY_UNVERIFIED") {
+    return {
+      ...mapAnalysisToResult(analysis),
+      findings: [],
+      findingsPagination: { page: options.page ?? 1, pageSize: options.pageSize ?? 25, total: 0, totalPages: 0, severity: options.severity ?? null },
+    };
+  }
   const page = options.page ?? 1;
   const pageSize = options.pageSize ?? 25;
   const findingWhere = { analysisId, ...(options.severity ? { severity: options.severity } : {}) };

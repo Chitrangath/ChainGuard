@@ -35,7 +35,7 @@ const AnalysisEnvelopeSchema = z.object({
     completedAt: z.string().nullable(),
     createdAt: z.string(),
     findings: z.array(FindingSchema),
-    findingCount: z.number().int().nonnegative().optional(),
+    findingCount: z.number().int().nonnegative().nullable().optional(),
     projectType: z.string().nullable().optional(),
     compilerVersion: z.string().nullable().optional(),
     contractsDiscovered: z.number().nullable().optional(),

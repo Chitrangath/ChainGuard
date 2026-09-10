@@ -69,7 +69,7 @@ export interface AnalysisSummaryData {
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
-  findingCount: number;
+  findingCount: number | null;
   projectType: string | null;
   compilerVersion: string | null;
   contractsDiscovered: number | null;

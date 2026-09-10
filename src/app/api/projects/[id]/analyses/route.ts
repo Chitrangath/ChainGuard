@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { analysisHistoryFilterSchema } from "@/lib/validation";
 import { handleApiError } from "@/lib/api-error";
-import { presentEvidence } from "@/lib/evidence";
+import { presentAnalysisSignals, presentEvidence } from "@/lib/evidence";
 
 export async function GET(
   request: NextRequest,
@@ -77,15 +77,17 @@ export async function GET(
         id: a.id,
         status: a.status,
         ...presentEvidence(a.evidenceVersion, a.riskScore, a.deploymentStatus),
-        compilationStatus: a.compilationStatus,
-        testStatus: a.testStatus,
-        totalTests: a.totalTests,
-        passedTests: a.passedTests,
-        failedTests: a.failedTests,
+        ...presentAnalysisSignals(a.evidenceVersion, {
+          compilationStatus: a.compilationStatus,
+          testStatus: a.testStatus,
+          totalTests: a.totalTests,
+          passedTests: a.passedTests,
+          failedTests: a.failedTests,
+          findingCount: a._count.findings,
+        }),
         startedAt: a.startedAt?.toISOString() ?? null,
         completedAt: a.completedAt?.toISOString() ?? null,
         createdAt: a.createdAt.toISOString(),
-        findingCount: a._count.findings,
       })),
       pagination: {
         page,

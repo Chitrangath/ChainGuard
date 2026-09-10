@@ -83,12 +83,20 @@ describe("createProjectSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("accepts GitHub URLs with subpath", () => {
+  it("rejects GitHub web subpaths that are not clone URLs", () => {
     const result = createProjectSchema.safeParse({
       name: "DeFi Vault",
       repositoryUrl: "https://github.com/owner/repo/tree/main",
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+  });
+
+  it.each([
+    "https://github.com/owner/repo?token=secret",
+    "https://user:secret@github.com/owner/repo",
+    "https://github.com/owner/repo#fragment",
+  ])("rejects repository URLs with credentials, query, or fragment: %s", (repositoryUrl) => {
+    expect(createProjectSchema.safeParse({ name: "Vault", repositoryUrl }).success).toBe(false);
   });
 
   it("rejects description exceeding 500 characters", () => {

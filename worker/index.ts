@@ -4,11 +4,16 @@ import { runAnalysis, type AnalysisContext } from "./analyzer";
 import { failureTransition, staleTransition } from "./job-lifecycle";
 import { runBoundedProcess } from "./process-runner";
 import * as fs from "node:fs";
-import * as path from "node:path";
+import {
+  executionContainerName,
+  executionWorkspace,
+  newExecutionToken,
+  ownedRunningWhere,
+  type ExecutionLease,
+} from "./job-ownership";
 
 const POLL_INTERVAL_MS = 3000;
 const STALE_THRESHOLD_MS = 7 * 60 * 1000; // overall timeout plus cleanup grace
-const WORKSPACE_BASE = "/tmp/guardrails";
 
 let running = true;
 
@@ -35,6 +40,7 @@ async function claimJob() {
     if (rows.length === 0) return null;
 
     const job = rows[0];
+    const executionToken = newExecutionToken();
 
     await tx.analysis.update({
       where: { id: job.id },
@@ -44,16 +50,17 @@ async function claimJob() {
         lastAttemptAt: new Date(),
         nextAttemptAt: null,
         attemptCount: { increment: 1 },
+        executionToken,
       },
     });
 
-    return { id: job.id, projectId: job.projectId, attemptCount: job.attemptCount + 1 };
+    return { id: job.id, projectId: job.projectId, attemptCount: job.attemptCount + 1, executionToken };
   });
 
   return result;
 }
 
-async function processJob(job: { id: string; projectId: string; attemptCount: number }) {
+async function processJob(job: { id: string; projectId: string; attemptCount: number; executionToken: string }) {
   const db = getDb();
 
   log(`Processing analysis ${job.id} for project ${job.projectId}`);
@@ -73,6 +80,7 @@ async function processJob(job: { id: string; projectId: string; attemptCount: nu
       projectId: job.projectId,
       repositoryUrl: project.repositoryUrl,
       projectDir: "",
+      executionToken: job.executionToken,
     };
 
     const result = await runAnalysis(ctx);
@@ -80,9 +88,9 @@ async function processJob(job: { id: string; projectId: string; attemptCount: nu
     if (result.success) {
       log(`Analysis ${job.id} completed`);
     } else {
-      await db.analysis.update({
-        where: { id: job.id },
-        data: failureTransition(result.error ?? "ANALYSIS_EXECUTION_FAILED", job.attemptCount, new Date()),
+      await db.analysis.updateMany({
+        where: ownedRunningWhere(job),
+        data: { ...failureTransition(result.error ?? "ANALYSIS_EXECUTION_FAILED", job.attemptCount, new Date()), executionToken: null },
       });
       log(`Analysis ${job.id} infrastructure failure: ${result.error}`);
     }
@@ -91,9 +99,9 @@ async function processJob(job: { id: string; projectId: string; attemptCount: nu
     log(`Analysis ${job.id} encountered error: ${msg}`);
 
     try {
-      await db.analysis.update({
-        where: { id: job.id },
-        data: failureTransition("ANALYSIS_EXECUTION_FAILED", job.attemptCount, new Date()),
+      await db.analysis.updateMany({
+        where: ownedRunningWhere(job),
+        data: { ...failureTransition("ANALYSIS_EXECUTION_FAILED", job.attemptCount, new Date()), executionToken: null },
       });
     } catch (updateError) {
       log(`Failed to mark analysis ${job.id} as FAILED: ${updateError}`);
@@ -112,22 +120,20 @@ async function checkStaleJobs() {
         status: "RUNNING",
         startedAt: { lt: staleThreshold },
       },
-      select: { id: true, attemptCount: true },
+      select: { id: true, attemptCount: true, executionToken: true },
     });
     let recovered = 0;
     for (const job of staleJobs) {
-      const safeId = path.basename(job.id).replace(/[^a-zA-Z0-9_.-]/g, "");
-      if (safeId !== job.id) continue;
-      await runBoundedProcess("docker", ["rm", "-f", `chainguard-${safeId}-analysis`], { timeoutMs: 10_000 });
-      const workspace = path.join(WORKSPACE_BASE, safeId);
-      if (workspace.startsWith(`${WORKSPACE_BASE}${path.sep}`)) {
-        fs.rmSync(workspace, { recursive: true, force: true });
-      }
+      if (!job.executionToken) continue;
+      const lease: ExecutionLease = { id: job.id, executionToken: job.executionToken };
       const result = await db.analysis.updateMany({
-        where: { id: job.id, status: "RUNNING" },
-        data: staleTransition(job.attemptCount, new Date()),
+        where: { ...ownedRunningWhere(lease), startedAt: { lt: staleThreshold } },
+        data: { ...staleTransition(job.attemptCount, new Date()), executionToken: null },
       });
       recovered += result.count;
+      if (result.count !== 1) continue;
+      await runBoundedProcess("docker", ["rm", "-f", executionContainerName(lease)], { timeoutMs: 10_000 });
+      fs.rmSync(executionWorkspace(lease), { recursive: true, force: true });
     }
     if (recovered > 0) {
       log(`Recovered ${recovered} stale RUNNING job(s)`);

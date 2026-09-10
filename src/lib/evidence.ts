@@ -18,3 +18,23 @@ export function presentEvidence(
     deploymentStatus: status === "VERIFIED" ? deploymentStatus : "BLOCKED",
   };
 }
+
+export function presentAnalysisSignals<T extends {
+  compilationStatus: string | null;
+  testStatus: string | null;
+  totalTests: number | null;
+  passedTests: number | null;
+  failedTests: number | null;
+  findingCount: number;
+}>(version: number | null | undefined, signals: T) {
+  if (evidenceStatus(version) === "VERIFIED") return signals;
+  return {
+    ...signals,
+    compilationStatus: null,
+    testStatus: null,
+    totalTests: null,
+    passedTests: null,
+    failedTests: null,
+    findingCount: null,
+  };
+}

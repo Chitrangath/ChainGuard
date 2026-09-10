@@ -157,6 +157,7 @@ describe("analysis-service", () => {
         startedAt: new Date("2024-01-01T00:00:00Z"),
         completedAt: new Date("2024-01-01T00:01:00Z"),
         createdAt: new Date("2024-01-01T00:00:00Z"),
+        evidenceVersion: 2,
         findings: [
           {
             id: "f1",
@@ -184,6 +185,29 @@ describe("analysis-service", () => {
       expect(result?.findings).toHaveLength(1);
       expect(result?.findings[0].severity).toBe("CRITICAL");
       expect(result?.findingsPagination).toEqual({ page: 1, pageSize: 25, total: 1, totalPages: 1, severity: null });
+    });
+
+    it("does not expose historic findings for a legacy analysis", async () => {
+      const { db } = await import("../db");
+      vi.mocked(db.analysis.findFirst).mockResolvedValue({
+        id: "legacy-id", projectId: "proj-id", status: "COMPLETED",
+        riskScore: 90, deploymentStatus: "READY", compilationStatus: "PASS", testStatus: "PASS",
+        totalTests: 3, passedTests: 3, failedTests: 0, startedAt: null, completedAt: null,
+        createdAt: new Date("2024-01-01T00:00:00Z"), evidenceVersion: null,
+      } as AnyAnalysis);
+
+      const { getAnalysisWithFindings } = await import("../analysis-service");
+      const result = await getAnalysisWithFindings("legacy-id", "proj-id");
+
+      expect(result).toMatchObject({
+        evidenceStatus: "LEGACY_UNVERIFIED",
+        compilationStatus: null,
+        testStatus: null,
+        findingCount: null,
+        findings: [],
+        findingsPagination: { total: 0, totalPages: 0 },
+      });
+      expect(db.finding.findMany).not.toHaveBeenCalled();
     });
   });
 });

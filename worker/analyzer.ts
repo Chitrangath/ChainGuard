@@ -16,23 +16,24 @@ import type {
   StaticAnalysisResult,
   GateReason,
 } from "./types";
-import { runBoundedProcess, type ProcessResult } from "./process-runner";
-import { isRetryableReason } from "./retry-policy";
+import { ANALYSIS_WORKSPACE_LIMIT, runBoundedProcess, type ProcessResult } from "./process-runner";
+import { classifyAnalyzerProcessFailure, classifyCloneFailure, isRetryableReason } from "./retry-policy";
 import { selectSingleProjectRoot } from "./project-root-policy";
+import { executionWorkspace, ownedRunningWhere } from "./job-ownership";
 
-const WORKSPACE_BASE = "/tmp/guardrails";
 const ANALYZER_IMAGE = "chainguard-analyzer:latest";
 const TOOL_TIMEOUT_MS = 120_000;
 const CLONE_TIMEOUT_MS = 60_000;
 const OVERALL_TIMEOUT_MS = 300_000;
 
-const GITHUB_URL_PATTERN = /^https:\/\/github\.com\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+(?:\/.*)?$/;
+const GITHUB_URL_PATTERN = /^https:\/\/github\.com\/[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+\/?$/;
 
 export interface AnalysisContext {
   analysisId: string;
   projectId: string;
   repositoryUrl: string;
   projectDir: string;
+  executionToken: string;
 }
 
 export interface AnalysisResult {
@@ -94,17 +95,17 @@ function validateUrl(url: string): boolean {
   return GITHUB_URL_PATTERN.test(url);
 }
 
-function workspacePath(analysisId: string): string {
-  const safeId = analysisId.replace(/[^a-zA-Z0-9_-]/g, "");
-  return path.join(WORKSPACE_BASE, safeId);
-}
-
 async function runCommand(
   cmd: string,
   args: string[],
-  opts: { cwd?: string; timeout?: number; signal?: AbortSignal } = {},
+  opts: { cwd?: string; timeout?: number; signal?: AbortSignal; workspacePath?: string } = {},
 ): Promise<ProcessResult> {
-  return runBoundedProcess(cmd, args, { cwd: opts.cwd, timeoutMs: opts.timeout ?? TOOL_TIMEOUT_MS, signal: opts.signal });
+  return runBoundedProcess(cmd, args, {
+    cwd: opts.cwd,
+    timeoutMs: opts.timeout ?? TOOL_TIMEOUT_MS,
+    signal: opts.signal,
+    workspace: opts.workspacePath ? { path: opts.workspacePath, ...ANALYSIS_WORKSPACE_LIMIT } : undefined,
+  });
 }
 
 async function dockerRun(
@@ -141,7 +142,7 @@ async function dockerRun(
     ANALYZER_IMAGE,
     ...command,
   ];
-  const result = await runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS, signal });
+  const result = await runCommand("docker", args, { timeout: TOOL_TIMEOUT_MS, signal, workspacePath: workspaceDir });
   if (result.reasonCode) await runBoundedProcess("docker", ["rm", "-f", containerName], { timeoutMs: 10_000 });
   return result;
 }
@@ -155,9 +156,9 @@ async function gitClone(
   const result = await runCommand(
     "git",
     ["clone", "--depth", "1", url, path.join(dest, "repo")],
-    { timeout: CLONE_TIMEOUT_MS, signal },
+    { timeout: CLONE_TIMEOUT_MS, signal, workspacePath: dest },
   );
-  return { exitCode: result.exitCode, stderr: result.reasonCode ?? (result.exitCode === 0 ? "" : "CLONE_FAILED") };
+  return { exitCode: result.exitCode, stderr: result.exitCode === 0 ? "" : classifyCloneFailure(result) };
 }
 
 async function initSubmodules(
@@ -283,6 +284,13 @@ async function runSlither(
     signal,
   );
 
+  if (result.exitCode !== 0) {
+    const reason = classifyAnalyzerProcessFailure(result, "SLITHER_EXECUTION_FAILED");
+    if (isRetryableReason(reason)) {
+      return { status: "FAIL", reasonCode: reason, safeMessage: "Analyzer runtime unavailable" };
+    }
+  }
+
   let rawJson = "";
   const slitherJsonFile = path.join(outputDir, "slither.json");
   if (fs.existsSync(slitherJsonFile)) {
@@ -314,7 +322,8 @@ function sourceManifestForTarget(
 
 export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult> {
   const db = getDb();
-  const wsDir = workspacePath(ctx.analysisId);
+  const lease = { id: ctx.analysisId, executionToken: ctx.executionToken };
+  const wsDir = executionWorkspace(lease);
   const outputDir = path.join(wsDir, "output");
   const repoDir = path.join(wsDir, "repo");
 
@@ -337,21 +346,16 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     const submodules = await initSubmodules(repoDir, ctx.repositoryUrl, controller.signal);
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
     if (!submodules.success) {
-      await db.analysis.update({ where: { id: ctx.analysisId }, data: {
+      await db.analysis.updateMany({ where: ownedRunningWhere(lease), data: {
         status: "COMPLETED", compilationStatus: "NOT_RUN", testStatus: "NOT_RUN",
         securityAnalysisStatus: "NOT_RUN", riskScore: null, deploymentStatus: "BLOCKED",
         coverage: "PARTIAL", gateReasons: [submodules.reason ?? "SUBMODULE_PREPARATION_FAILED"],
         failureReason: submodules.reason ?? "SUBMODULE_PREPARATION_FAILED",
-        evidenceVersion: 2, completedAt: new Date(),
+        evidenceVersion: 2, completedAt: new Date(), executionToken: null,
       }});
       return { success: true };
     }
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
-    await db.analysis.update({
-      where: { id: ctx.analysisId },
-      data: { status: "RUNNING", startedAt: new Date() },
-    });
-
     const discovery = discoverSolidityFiles(repoDir);
     const projectType = classifyProject(repoDir, discovery);
     const rootPolicy = selectSingleProjectRoot(discovery.projectRoots);
@@ -369,8 +373,8 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     };
 
     if (sourcePaths.length === 0) {
-      await db.analysis.update({
-        where: { id: ctx.analysisId },
+      await db.analysis.updateMany({
+        where: ownedRunningWhere(lease),
         data: {
           status: "COMPLETED",
           compilationStatus: "NOT_RUN",
@@ -383,6 +387,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           deploymentStatus: "BLOCKED",
           gateReasons: ["NO_CONTRACTS_FOUND"],
           evidenceVersion: 2,
+          executionToken: null,
           ...discoveryEvidence,
           completedAt: new Date(),
         },
@@ -526,9 +531,10 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           ? tests.reasonCode
           : null;
 
-    await db.analysis.update({
-      where: { id: ctx.analysisId },
-      data: {
+    await db.$transaction(async (tx) => {
+      const persisted = await tx.analysis.updateMany({
+        where: ownedRunningWhere(lease),
+        data: {
         status: "COMPLETED",
         compilationStatus: compilation.status,
         testStatus: tests.status,
@@ -550,11 +556,11 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
         failureReason,
         ...discoveryEvidence,
         completedAt: new Date(),
-      },
-    });
-
-    if (findings.length > 0) {
-      await db.finding.createMany({
+        executionToken: null,
+        },
+      });
+      if (persisted.count !== 1 || findings.length === 0) return;
+      await tx.finding.createMany({
         data: findings.map((f) => ({
           analysisId: ctx.analysisId,
           severity: f.severity,
@@ -567,7 +573,7 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
           scope: f.scope,
         })),
       });
-    }
+    });
 
     return { success: true };
   } catch (error) {

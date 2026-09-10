@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { spawn } from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { runBoundedProcess } from "../process-runner";
 
 describe("runBoundedProcess", () => {
@@ -30,6 +32,20 @@ describe("runBoundedProcess", () => {
       expect(unrelated.exitCode).toBeNull();
     } finally {
       try { process.kill(-unrelated.pid!, "SIGKILL"); } catch { unrelated.kill("SIGKILL"); }
+    }
+  });
+
+  it("terminates a child when its owned workspace exceeds the byte limit", async () => {
+    const workspace = fs.mkdtempSync("/tmp/chainguard-process-budget-");
+    try {
+      const output = path.join(workspace, "large.bin");
+      const result = await runBoundedProcess(process.execPath, ["-e", `require('fs').writeFileSync(${JSON.stringify(output)}, Buffer.alloc(4096)); setInterval(()=>{}, 1000)`], {
+        timeoutMs: 2_000,
+        workspace: { path: workspace, maxBytes: 1_024, maxEntries: 100, pollIntervalMs: 10 },
+      });
+      expect(result.reasonCode).toBe("WORKSPACE_LIMIT");
+    } finally {
+      fs.rmSync(workspace, { recursive: true, force: true });
     }
   });
 });

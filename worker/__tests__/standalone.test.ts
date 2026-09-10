@@ -3,7 +3,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 const { runBoundedProcess } = vi.hoisted(() => ({ runBoundedProcess: vi.fn() }));
-vi.mock("../process-runner", () => ({ runBoundedProcess }));
+vi.mock("../process-runner", () => ({
+  runBoundedProcess,
+  ANALYSIS_WORKSPACE_LIMIT: { maxBytes: 1024, maxEntries: 100, pollIntervalMs: 10 },
+}));
 
 import { standaloneCompile } from "../adapters/standalone";
 
