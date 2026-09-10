@@ -88,6 +88,16 @@ describe("parseSlitherOutput", () => {
       firstParty: ["src/Vault.sol"], dependency: ["lib/Lib.sol"], generated: [],
     })[0].scope).toBe("FIRST_PARTY");
   });
+
+  it("classifies a contained nested lib path as dependency even when discovery depth omitted it", () => {
+    const output = structuredClone(VALID_SLITHER_WITH_FINDINGS);
+    output.results.detectors[0].elements = [{
+      type: "contract", name: "DeepLib",
+      source_mapping: { filename_relative: "packages/app/lib/vendor/deep/Lib.sol", start: 0, length: 1, lines: [1] },
+    }];
+    expect(parseSlitherOutput(JSON.stringify(output), { firstParty: [], dependency: [], generated: [] })[0].scope)
+      .toBe("DEPENDENCY");
+  });
   it("parses valid JSON with zero findings", () => {
     const findings = parseSlitherOutput(JSON.stringify(VALID_SLITHER_ZERO_FINDINGS));
     expect(findings).toEqual([]);

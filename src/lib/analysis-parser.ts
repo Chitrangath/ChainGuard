@@ -66,8 +66,9 @@ function pathScope(filename: string, manifest: SourceScopeManifest): ParsedFindi
   const normalized = normalizeEvidencePath(filename);
   if (!normalized) return "UNKNOWN";
   if (manifest.firstParty.includes(normalized)) return "FIRST_PARTY";
-  if (manifest.dependency.includes(normalized)) return "DEPENDENCY";
-  if (manifest.generated.includes(normalized)) return "GENERATED";
+  const segments = normalized.split("/");
+  if (manifest.dependency.includes(normalized) || segments.includes("lib") || segments.includes("node_modules")) return "DEPENDENCY";
+  if (manifest.generated.includes(normalized) || segments.some((segment) => ["out", "artifacts", "build", "cache"].includes(segment))) return "GENERATED";
   return "UNKNOWN";
 }
 
