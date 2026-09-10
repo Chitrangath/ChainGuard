@@ -66,6 +66,8 @@ describe("analysis-service", () => {
       expect(result?.id).toBe("test-id");
       expect(result?.findingCount).toBe(2);
       expect(result?.evidenceStatus).toBe("VERIFIED");
+      const { setCachedAnalysis } = await import("../analysis-cache");
+      expect(setCachedAnalysis).toHaveBeenCalledWith("test-id", expect.objectContaining({ findingCount: 2, findings: [] }));
     });
 
     it("qualifies legacy analysis and suppresses its historical score", async () => {

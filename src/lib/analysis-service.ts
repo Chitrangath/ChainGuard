@@ -1,6 +1,7 @@
 import { db } from "./db";
 import {
   getCachedAnalysis,
+  setCachedAnalysis,
   isTerminal,
   type CachedAnalysis,
 } from "./analysis-cache";
@@ -170,7 +171,7 @@ function cachedToResult(cached: CachedAnalysis): AnalysisResult {
     startedAt: cached.startedAt,
     completedAt: cached.completedAt,
     createdAt: cached.createdAt,
-    findingCount: cached.findings.length,
+    findingCount: cached.findingCount ?? cached.findings.length,
     projectType: legacy ? null : cached.projectType ?? null,
     compilerVersion: legacy ? null : cached.compilerVersion ?? null,
     contractsDiscovered: legacy ? null : cached.contractsDiscovered ?? null,
@@ -215,8 +216,32 @@ export async function getAnalysisById(
 
   if (!analysis) return null;
   if (projectId && analysis.projectId !== projectId) return null;
-
-  return mapAnalysisToResult(analysis);
+  const result = mapAnalysisToResult(analysis);
+  if (isTerminal(analysis.status)) {
+    await setCachedAnalysis(analysisId, {
+      id: result.id, projectId: result.projectId, status: result.status,
+      riskScore: result.riskScore, deploymentStatus: result.deploymentStatus,
+      compilationStatus: result.compilationStatus, testStatus: result.testStatus,
+      totalTests: result.totalTests, passedTests: result.passedTests, failedTests: result.failedTests,
+      startedAt: result.startedAt, completedAt: result.completedAt, createdAt: result.createdAt,
+      findings: [], findingCount: result.findingCount,
+      projectType: result.projectType, compilerVersion: result.compilerVersion,
+      contractsDiscovered: result.contractsDiscovered, contractsCompiled: result.contractsCompiled,
+      contractsTargetedForScan: result.contractsTargetedForScan,
+      securityAnalysisStatus: result.securityAnalysisStatus, gateReasons: result.gateReasons,
+      coverage: result.coverage, evidenceVersion: analysis.evidenceVersion, evidenceStatus: result.evidenceStatus,
+      firstPartySourcesDiscovered: result.firstPartySourcesDiscovered,
+      dependencySourcesDiscovered: result.dependencySourcesDiscovered,
+      generatedSourcesDiscovered: result.generatedSourcesDiscovered,
+      firstPartySourcesTargeted: result.firstPartySourcesTargeted, filesScanned: result.filesScanned,
+      sourcesRejected: result.sourcesRejected, discoveryReasons: result.discoveryReasons,
+      failureReason: result.failureReason, attemptCount: result.attemptCount,
+      lastAttemptAt: result.lastAttemptAt, nextAttemptAt: result.nextAttemptAt,
+      lastSafeReason: result.lastSafeReason, terminalReason: result.terminalReason,
+      projectRootsDiscovered: result.projectRootsDiscovered, projectRootsAnalyzed: result.projectRootsAnalyzed,
+    });
+  }
+  return result;
 }
 
 export async function getAnalysisWithFindings(
