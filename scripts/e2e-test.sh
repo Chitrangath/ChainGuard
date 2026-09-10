@@ -38,7 +38,27 @@ while (( elapsed < ANALYSIS_TIMEOUT )); do
   elapsed=$((elapsed + POLL_INTERVAL))
 done
 
-detail=$(curl -fsS "$BASE_URL/api/projects/$project_id/analyses/$analysis_id")
+detail=$(BASE_URL="$BASE_URL" PROJECT_ID="$project_id" ANALYSIS_ID="$analysis_id" node <<'NODE'
+async function main() {
+  const base = `${process.env.BASE_URL}/api/projects/${process.env.PROJECT_ID}/analyses/${process.env.ANALYSIS_ID}`;
+  const first = await fetch(`${base}?page=1&pageSize=50`).then((response) => {
+    if (!response.ok) throw new Error("Unable to load findings page 1");
+    return response.json();
+  });
+  const findings = [...first.findings];
+  for (let page = 2; page <= first.findingsPagination.totalPages; page++) {
+    const next = await fetch(`${base}?page=${page}&pageSize=50`).then((response) => {
+      if (!response.ok) throw new Error(`Unable to load findings page ${page}`);
+      return response.json();
+    });
+    findings.push(...next.findings);
+  }
+  if (findings.length !== first.findingsPagination.total) throw new Error("Incomplete paginated findings evidence");
+  process.stdout.write(JSON.stringify({ ...first, findings }));
+}
+main().catch((error) => { console.error(error.message); process.exit(1); });
+NODE
+)
 E2E_MODE="$E2E_MODE" RESULT_JSON="$result" DETAIL_JSON="$detail" node <<'NODE'
 const assert = require("node:assert/strict");
 const mode = process.env.E2E_MODE;
