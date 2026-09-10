@@ -85,7 +85,7 @@ const SLITHER_OUTPUT_WITH_STRING_LINES = {
 
 describe("parseSlitherOutput", () => {
   it("parses numeric lines array from real Slither output", () => {
-    const findings = parseSlitherOutput(JSON.stringify(SLITHER_OUTPUT_REENTRANCY));
+    const findings = parseSlitherOutput(JSON.stringify(SLITHER_OUTPUT_REENTRANCY), { firstParty: ["src/Vault.sol"], dependency: [], generated: [] });
     expect(findings).toHaveLength(2);
     expect(findings[0].severity).toBe("CRITICAL");
     expect(findings[0].type).toBe("reentrancy-eth");
@@ -97,7 +97,7 @@ describe("parseSlitherOutput", () => {
   });
 
   it("parses string lines array (legacy format)", () => {
-    const findings = parseSlitherOutput(JSON.stringify(SLITHER_OUTPUT_WITH_STRING_LINES));
+    const findings = parseSlitherOutput(JSON.stringify(SLITHER_OUTPUT_WITH_STRING_LINES), { firstParty: ["src/Vault.sol"], dependency: [], generated: [] });
     expect(findings).toHaveLength(1);
     expect(findings[0].line).toBe(11);
   });

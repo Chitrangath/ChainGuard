@@ -18,6 +18,39 @@ interface StandardJsonInput {
   };
 }
 
+interface SourceInput {
+  relativePath: string;
+  absolutePath: string;
+  content: string;
+}
+
+const MAX_SOURCE_FILES = 500;
+const MAX_SOURCE_FILE_BYTES = 1024 * 1024;
+const MAX_TOTAL_SOURCE_BYTES = 20 * 1024 * 1024;
+
+function isContained(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`));
+}
+
+function readContainedRegularFile(candidate: string, realRoot: string): SourceInput | null {
+  try {
+    const lexical = path.resolve(candidate);
+    if (!isContained(realRoot, lexical)) return null;
+    const linkStat = fs.lstatSync(lexical);
+    if (linkStat.isSymbolicLink() || !linkStat.isFile() || linkStat.size > MAX_SOURCE_FILE_BYTES) return null;
+    const canonical = fs.realpathSync(lexical);
+    if (!isContained(realRoot, canonical)) return null;
+    return {
+      relativePath: path.relative(realRoot, canonical).replaceAll("\\", "/"),
+      absolutePath: canonical,
+      content: fs.readFileSync(canonical, "utf-8"),
+    };
+  } catch {
+    return null;
+  }
+}
+
 interface StandardJsonOutput {
   errors?: Array<{
     severity: "error" | "warning";
@@ -28,18 +61,12 @@ interface StandardJsonOutput {
 }
 
 function buildStandardJsonInput(
-  sourceFiles: Array<{ relativePath: string; absolutePath: string }>,
-  workspaceDir: string,
+  sourceFiles: SourceInput[],
 ): StandardJsonInput {
   const sources: Record<string, { content: string }> = {};
 
   for (const file of sourceFiles) {
-    try {
-      const content = fs.readFileSync(file.absolutePath, "utf-8");
-      sources[file.relativePath] = { content };
-    } catch {
-      continue;
-    }
+    sources[file.relativePath] = { content: file.content };
   }
 
   return {
@@ -58,38 +85,32 @@ function buildStandardJsonInput(
 function resolveImports(
   sourceContent: string,
   sourcePath: string,
-  workspaceDir: string,
-  visited: Set<string> = new Set(),
-): Array<{ relativePath: string; absolutePath: string }> {
-  const resolved: Array<{ relativePath: string; absolutePath: string }> = [];
+  realRoot: string,
+  visited: Set<string>,
+  budget: { files: number; bytes: number },
+): SourceInput[] {
+  const resolved: SourceInput[] = [];
   const importRegex = /import\s+(?:.*\s+from\s+)?["']([^"']+)["']\s*;/g;
   let match;
 
   while ((match = importRegex.exec(sourceContent)) !== null) {
     const importPath = match[1];
-    if (visited.has(importPath)) continue;
-    visited.add(importPath);
-
     let resolvedPath: string;
     if (importPath.startsWith("./") || importPath.startsWith("../")) {
       const sourceDir = path.dirname(sourcePath);
       resolvedPath = path.resolve(sourceDir, importPath);
     } else {
-      resolvedPath = path.resolve(workspaceDir, importPath);
+      resolvedPath = path.resolve(realRoot, importPath);
     }
-
-    const relPath = path.relative(workspaceDir, resolvedPath);
-
-    if (!resolvedPath.startsWith(workspaceDir)) {
-      continue;
-    }
-
-    if (fs.existsSync(resolvedPath)) {
-      resolved.push({ relativePath: relPath, absolutePath: resolvedPath });
-      const content = fs.readFileSync(resolvedPath, "utf-8");
-      const nested = resolveImports(content, resolvedPath, workspaceDir, visited);
-      resolved.push(...nested);
-    }
+    const source = readContainedRegularFile(resolvedPath, realRoot);
+    if (!source || visited.has(source.absolutePath)) continue;
+    const bytes = Buffer.byteLength(source.content);
+    if (budget.files >= MAX_SOURCE_FILES || budget.bytes + bytes > MAX_TOTAL_SOURCE_BYTES) continue;
+    visited.add(source.absolutePath);
+    budget.files++;
+    budget.bytes += bytes;
+    resolved.push(source);
+    resolved.push(...resolveImports(source.content, source.absolutePath, realRoot, visited, budget));
   }
 
   return resolved;
@@ -108,16 +129,26 @@ export async function standaloneCompile(
     };
   }
 
-  const sourceFiles: Array<{ relativePath: string; absolutePath: string }> = [];
+  const sourceFiles: SourceInput[] = [];
   const visited = new Set<string>();
+  const budget = { files: 0, bytes: 0 };
+  let realRoot: string;
+  try {
+    realRoot = fs.realpathSync(target.root);
+  } catch {
+    return { status: "FAIL", reasonCode: "NO_SOURCE_FILES", safeMessage: "No source files found to compile" };
+  }
 
   for (const relPath of target.sourcePaths) {
-    const absPath = path.join(target.root, relPath);
-    if (!fs.existsSync(absPath)) continue;
-
-    sourceFiles.push({ relativePath: relPath, absolutePath: absPath });
-    const content = fs.readFileSync(absPath, "utf-8");
-    const imports = resolveImports(content, absPath, target.root, visited);
+    const source = readContainedRegularFile(path.resolve(target.root, relPath), realRoot);
+    if (!source || visited.has(source.absolutePath)) continue;
+    const bytes = Buffer.byteLength(source.content);
+    if (budget.files >= MAX_SOURCE_FILES || budget.bytes + bytes > MAX_TOTAL_SOURCE_BYTES) continue;
+    visited.add(source.absolutePath);
+    budget.files++;
+    budget.bytes += bytes;
+    sourceFiles.push(source);
+    const imports = resolveImports(source.content, source.absolutePath, realRoot, visited, budget);
     sourceFiles.push(...imports);
   }
 
@@ -129,7 +160,7 @@ export async function standaloneCompile(
     };
   }
 
-  const input = buildStandardJsonInput(sourceFiles, target.root);
+  const input = buildStandardJsonInput(sourceFiles);
   const inputJson = JSON.stringify(input);
 
   const uid = process.getuid?.() ?? 1000;

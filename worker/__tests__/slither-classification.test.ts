@@ -51,14 +51,50 @@ const VALID_SLITHER_INTERNAL_FAILURE = {
   results: { detectors: [] },
 };
 
+const VAULT_MANIFEST = { firstParty: ["src/Vault.sol"], dependency: ["lib/dependency/Dependency.sol"], generated: [] };
+
 describe("parseSlitherOutput", () => {
+
+  it.each(["/etc/passwd", "../other-root/Vault.sol", "C:\\outside\\Vault.sol"])(
+    "does not attribute an untrusted path as first-party: %s",
+    (filename) => {
+      const output = {
+        success: true,
+        results: { detectors: [{
+          check: "escape", impact: "High", confidence: "High", description: "escaped",
+          elements: [{ type: "contract", name: "Vault", source_mapping: { filename_relative: filename, start: 0, length: 1, lines: [1] } }],
+        }] },
+      };
+
+      expect(parseSlitherOutput(JSON.stringify(output), {
+        firstParty: ["src/Vault.sol"], dependency: [], generated: [],
+      })[0].scope).toBe("UNKNOWN");
+    },
+  );
+
+  it("keeps a mixed finding first-party when a proven first-party element is involved", () => {
+    const output = {
+      success: true,
+      results: { detectors: [{
+        check: "mixed", impact: "High", confidence: "High", description: "mixed",
+        elements: [
+          { type: "contract", name: "Vault", source_mapping: { filename_relative: "src/Vault.sol", start: 0, length: 1, lines: [1] } },
+          { type: "contract", name: "Lib", source_mapping: { filename_relative: "lib/Lib.sol", start: 0, length: 1, lines: [1] } },
+        ],
+      }] },
+    };
+
+    expect(parseSlitherOutput(JSON.stringify(output), {
+      firstParty: ["src/Vault.sol"], dependency: ["lib/Lib.sol"], generated: [],
+    })[0].scope).toBe("FIRST_PARTY");
+  });
   it("parses valid JSON with zero findings", () => {
     const findings = parseSlitherOutput(JSON.stringify(VALID_SLITHER_ZERO_FINDINGS));
     expect(findings).toEqual([]);
   });
 
   it("parses valid JSON with findings", () => {
-    const findings = parseSlitherOutput(JSON.stringify(VALID_SLITHER_WITH_FINDINGS));
+    const findings = parseSlitherOutput(JSON.stringify(VALID_SLITHER_WITH_FINDINGS), VAULT_MANIFEST);
     expect(findings).toHaveLength(1);
     expect(findings[0].severity).toBe("CRITICAL");
     expect(findings[0].scope).toBe("FIRST_PARTY");
@@ -76,7 +112,7 @@ describe("parseSlitherOutput", () => {
         lines: [1],
       },
     });
-    expect(parseSlitherOutput(JSON.stringify(output))[0].scope).toBe("FIRST_PARTY");
+    expect(parseSlitherOutput(JSON.stringify(output), VAULT_MANIFEST)[0].scope).toBe("FIRST_PARTY");
   });
 
   it.each([
@@ -95,7 +131,12 @@ describe("parseSlitherOutput", () => {
         lines: [1],
       },
     }];
-    expect(parseSlitherOutput(JSON.stringify(output))[0].scope).toBe(expectedScope);
+    const manifest = {
+      firstParty: [],
+      dependency: expectedScope === "DEPENDENCY" ? [file] : [],
+      generated: expectedScope === "GENERATED" ? [file] : [],
+    };
+    expect(parseSlitherOutput(JSON.stringify(output), manifest)[0].scope).toBe(expectedScope);
   });
 
   it("returns empty array for invalid JSON (parse failure)", () => {

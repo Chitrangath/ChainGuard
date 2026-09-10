@@ -2,7 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { getDb } from "./db";
 import { calculateRisk } from "../src/lib/risk-engine";
-import { classifySlitherResult, parseSlitherOutput } from "../src/lib/analysis-parser";
+import { classifySlitherResult, type SourceScopeManifest } from "../src/lib/analysis-parser";
 import { discoverSolidityFiles } from "./discovery";
 import { selectCompiler, parseFoundryToml, parsePragma } from "./compiler";
 import { prepareSubmodules } from "./submodule";
@@ -264,6 +264,7 @@ async function runSlither(
   outputDir: string,
   compilerVersion: string,
   contractsTargeted: number,
+  sourceManifest: SourceScopeManifest,
   signal?: AbortSignal,
 ): Promise<StaticAnalysisResult> {
   const slitherJsonPath = "/tmp/output/slither.json";
@@ -288,7 +289,27 @@ async function runSlither(
     rawJson = fs.readFileSync(slitherJsonFile, "utf-8");
   }
 
-  return classifySlitherResult(rawJson, result.exitCode, result.stderr, contractsTargeted);
+  return classifySlitherResult(rawJson, result.exitCode, result.stderr, contractsTargeted, sourceManifest);
+}
+
+function sourceManifestForTarget(
+  repoDir: string,
+  targetRoot: string,
+  firstParty: string[],
+  dependency: string[],
+  generated: string[],
+): SourceScopeManifest {
+  const relativeToTarget = (repoRelativePaths: string[]) => repoRelativePaths.flatMap((repoRelative) => {
+    const absolute = path.resolve(repoDir, repoRelative);
+    const relative = path.relative(targetRoot, absolute).replaceAll("\\", "/");
+    if (!relative || relative === ".." || relative.startsWith("../") || path.posix.isAbsolute(relative)) return [];
+    return [relative];
+  });
+  return {
+    firstParty: relativeToTarget(firstParty),
+    dependency: relativeToTarget(dependency),
+    generated: relativeToTarget(generated),
+  };
 }
 
 export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult> {
@@ -443,7 +464,21 @@ export async function runAnalysis(ctx: AnalysisContext): Promise<AnalysisResult>
     if (compilation.status !== "PASS") {
       staticAnalysis = { status: "NOT_RUN", reasonCode: "COMPILATION_FAILED", safeMessage: "Compilation failed, Slither skipped" };
     } else {
-      staticAnalysis = await runSlither(targetRoot, wsDir, outputDir, compilerSelection.version, contractsTargeted, controller.signal);
+      staticAnalysis = await runSlither(
+        targetRoot,
+        wsDir,
+        outputDir,
+        compilerSelection.version,
+        contractsTargeted,
+        sourceManifestForTarget(
+          repoDir,
+          targetRoot,
+          sourcePaths,
+          discovery.dependencyContracts,
+          discovery.generatedContracts,
+        ),
+        controller.signal,
+      );
     }
     if (controller.signal.aborted) throw new Error("ANALYSIS_TIMEOUT");
     if (staticAnalysis.status !== "PASS" && isRetryableReason(staticAnalysis.reasonCode)) {

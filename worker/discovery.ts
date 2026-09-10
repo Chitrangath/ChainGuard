@@ -20,12 +20,14 @@ const DEFAULT_MAX_DEPTH = 6;
 const DEFAULT_MAX_FILES = 500;
 const DEFAULT_MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 const DEFAULT_MAX_TOTAL_SIZE = 20 * 1024 * 1024; // 20MB
+const DEFAULT_MAX_ENTRIES = 5_000;
 
 export interface DiscoveryOptions {
   maxDepth?: number;
   maxFiles?: number;
   maxFileSizeBytes?: number;
   maxTotalSourceSizeBytes?: number;
+  maxEntries?: number;
 }
 
 export interface DiscoveryResult {
@@ -88,16 +90,42 @@ function reject(result: DiscoveryResult, filePath: string, reason: string) {
   result.rejected.push({ filePath, reason, scope });
 }
 
-function mayContainSolidity(dir: string, budget = 1000): boolean {
+interface TraversalBudget {
+  entries: number;
+  exhausted: boolean;
+}
+
+function readBoundedEntries(dir: string, opts: Required<DiscoveryOptions>, budget: TraversalBudget): fs.Dirent[] {
+  if (budget.exhausted) return [];
+  const entries: fs.Dirent[] = [];
+  let handle: fs.Dir | undefined;
+  try {
+    handle = fs.opendirSync(dir);
+    for (;;) {
+      const entry = handle.readSync();
+      if (!entry) break;
+      budget.entries++;
+      if (budget.entries > opts.maxEntries) {
+        budget.exhausted = true;
+        break;
+      }
+      entries.push(entry);
+    }
+  } catch {
+    return [];
+  } finally {
+    try { handle?.closeSync(); } catch { /* already closed */ }
+  }
+  return entries;
+}
+
+function mayContainSolidity(dir: string, opts: Required<DiscoveryOptions>, traversal: TraversalBudget): boolean {
   const pending = [dir];
-  let inspected = 0;
   while (pending.length > 0) {
     const current = pending.pop()!;
-    let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { continue; }
+    const entries = readBoundedEntries(current, opts, traversal);
+    if (traversal.exhausted) return true;
     for (const entry of entries) {
-      inspected++;
-      if (inspected > budget) return true;
       if (entry.isSymbolicLink()) continue;
       if (entry.isFile() && entry.name.endsWith(".sol")) return true;
       if (entry.isDirectory() && !isExcludedDir(entry.name)) pending.push(path.join(current, entry.name));
@@ -113,24 +141,25 @@ function walkDir(
   opts: Required<DiscoveryOptions>,
   result: DiscoveryResult,
   currentTotalSize: number,
+  traversal: TraversalBudget,
   forcedGenerated = false,
 ): number {
+  if (traversal.exhausted) return currentTotalSize;
   if (depth > opts.maxDepth) {
-    if (mayContainSolidity(dir)) reject(result, path.relative(repoRoot, dir), "max_depth_exceeded");
+    if (mayContainSolidity(dir, opts, traversal)) reject(result, path.relative(repoRoot, dir), "max_depth_exceeded");
+    if (traversal.exhausted) reject(result, path.relative(repoRoot, dir), "max_entries_exceeded");
     return currentTotalSize;
   }
 
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dir, { withFileTypes: true });
-    entries.sort((a, b) => {
+  const entries = readBoundedEntries(dir, opts, traversal);
+  if (traversal.exhausted) {
+    reject(result, path.relative(repoRoot, dir) || ".", "max_entries_exceeded");
+  }
+  entries.sort((a, b) => {
       const aGenerated = a.isDirectory() && ["out", "artifacts", "build", "cache"].includes(a.name);
       const bGenerated = b.isDirectory() && ["out", "artifacts", "build", "cache"].includes(b.name);
       return Number(aGenerated) - Number(bGenerated) || a.name.localeCompare(b.name);
-    });
-  } catch {
-    return currentTotalSize;
-  }
+  });
 
   for (const entry of entries) {
     if (result.firstPartyContracts.length +
@@ -146,7 +175,7 @@ function walkDir(
     if (entry.isDirectory()) {
       const generatedDirectory = forcedGenerated || ["out", "artifacts", "build", "cache"].includes(entry.name);
       if (isExcludedDir(entry.name) && !generatedDirectory) continue;
-      currentTotalSize = walkDir(fullPath, repoRoot, depth + 1, opts, result, currentTotalSize, generatedDirectory);
+      currentTotalSize = walkDir(fullPath, repoRoot, depth + 1, opts, result, currentTotalSize, traversal, generatedDirectory);
       continue;
     }
 
@@ -234,6 +263,7 @@ export function discoverSolidityFiles(
     maxFiles: options.maxFiles ?? DEFAULT_MAX_FILES,
     maxFileSizeBytes: options.maxFileSizeBytes ?? DEFAULT_MAX_FILE_SIZE,
     maxTotalSourceSizeBytes: options.maxTotalSourceSizeBytes ?? DEFAULT_MAX_TOTAL_SIZE,
+    maxEntries: options.maxEntries ?? DEFAULT_MAX_ENTRIES,
   };
 
   const result: DiscoveryResult = {
@@ -245,7 +275,7 @@ export function discoverSolidityFiles(
     reasonCodes: [],
   };
 
-  walkDir(repoDir, repoDir, 0, opts, result, 0);
+  walkDir(repoDir, repoDir, 0, opts, result, 0, { entries: 0, exhausted: false });
 
   result.projectRoots = findProjectRoots(repoDir, [
     ...result.firstPartyContracts,

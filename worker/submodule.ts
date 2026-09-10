@@ -207,8 +207,20 @@ export async function prepareSubmodules(repoDir: string, parentRepoUrl: string, 
   const validation = validateAllSubmodules(entries, parentRepoUrl);
   if (!validation.valid) return { success: false, reason: "SUBMODULE_CONFIGURATION_INVALID" };
   const execute = options.run ?? ((cmd, args) => runBoundedProcess(cmd, args, { cwd: repoDir, timeoutMs: 60_000, signal: options.signal }));
+  const realRepo = fs.realpathSync(repoDir);
   for (const submodule of validation.urls) {
     const target = path.join(repoDir, submodule.path);
+    let current = repoDir;
+    for (const segment of submodule.path.split("/")) {
+      current = path.join(current, segment);
+      if (!fs.existsSync(current)) break;
+      const stat = fs.lstatSync(current);
+      if (stat.isSymbolicLink()) return { success: false, reason: "SUBMODULE_PATH_INVALID" };
+      const relative = path.relative(realRepo, fs.realpathSync(current));
+      if (path.isAbsolute(relative) || relative === ".." || relative.startsWith(`..${path.sep}`)) {
+        return { success: false, reason: "SUBMODULE_PATH_INVALID" };
+      }
+    }
     if (fs.existsSync(target) && fs.lstatSync(target).isSymbolicLink()) return { success: false, reason: "SUBMODULE_PATH_INVALID" };
     const result = await execute("git", ["-c", "protocol.file.allow=never", "submodule", "update", "--init", "--depth", "1", "--single-branch", submodule.path]);
     if (result.exitCode !== 0) return { success: false, reason: "SUBMODULE_CHECKOUT_FAILED" };

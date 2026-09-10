@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import {
   validateSubmoduleUrl,
   validateAllSubmodules,
@@ -174,6 +175,24 @@ describe("validateAllSubmodules", () => {
 });
 
 describe("prepareSubmodules", () => {
+
+  it("rejects a submodule below a symlinked ancestor before invoking git", async () => {
+    const dir = fs.mkdtempSync("/tmp/chainguard-submodule-");
+    const outside = fs.mkdtempSync("/tmp/chainguard-submodule-outside-");
+    try {
+      fs.writeFileSync(path.join(dir, ".gitmodules"), '[submodule "dep"]\n  path = lib/dep\n  url = https://github.com/user/dep\n');
+      fs.symlinkSync(outside, path.join(dir, "lib"));
+      const run = vi.fn();
+
+      const result = await prepareSubmodules(dir, "https://github.com/user/root", { run });
+
+      expect(result).toEqual({ success: false, reason: "SUBMODULE_PATH_INVALID" });
+      expect(run).not.toHaveBeenCalled();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+      fs.rmSync(outside, { recursive: true, force: true });
+    }
+  });
   it("returns a safe incomplete reason when checkout fails", async () => {
     const dir = fs.mkdtempSync("/tmp/chainguard-submodule-failure-");
     try {

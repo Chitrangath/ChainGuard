@@ -48,21 +48,32 @@ export interface ParsedFinding {
   scope: "FIRST_PARTY" | "DEPENDENCY" | "GENERATED" | "UNKNOWN";
 }
 
-function pathScope(filename: string): ParsedFinding["scope"] {
-  const normalized = filename.replaceAll("\\", "/").replace(/^\.\//, "");
-  const segments = normalized.split("/").filter(Boolean);
-  if (segments.some((part) => ["out", "artifacts", "build", "cache"].includes(part))) {
-    return "GENERATED";
-  }
-  if (segments.includes("lib") || segments.includes("node_modules")) {
-    return "DEPENDENCY";
-  }
-  return normalized ? "FIRST_PARTY" : "UNKNOWN";
+export interface SourceScopeManifest {
+  firstParty: string[];
+  dependency: string[];
+  generated: string[];
 }
 
-function extractScope(elements: SlitherElement[]): ParsedFinding["scope"] {
+function normalizeEvidencePath(filename: string): string | null {
+  const candidate = filename.replaceAll("\\", "/").replace(/^\.\//, "");
+  if (!candidate || candidate.startsWith("/") || /^[A-Za-z]:\//.test(candidate)) return null;
+  const parts = candidate.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) return null;
+  return parts.join("/");
+}
+
+function pathScope(filename: string, manifest: SourceScopeManifest): ParsedFinding["scope"] {
+  const normalized = normalizeEvidencePath(filename);
+  if (!normalized) return "UNKNOWN";
+  if (manifest.firstParty.includes(normalized)) return "FIRST_PARTY";
+  if (manifest.dependency.includes(normalized)) return "DEPENDENCY";
+  if (manifest.generated.includes(normalized)) return "GENERATED";
+  return "UNKNOWN";
+}
+
+function extractScope(elements: SlitherElement[], manifest: SourceScopeManifest): ParsedFinding["scope"] {
   const scopes = elements.map((element) =>
-    pathScope(element.source_mapping?.filename_relative ?? ""),
+    pathScope(element.source_mapping?.filename_relative ?? "", manifest),
   );
   if (scopes.includes("FIRST_PARTY")) return "FIRST_PARTY";
   if (scopes.includes("DEPENDENCY")) return "DEPENDENCY";
@@ -99,7 +110,7 @@ function extractLocation(elements: SlitherElement[]): { file: string | null; lin
   return { file: null, line: null };
 }
 
-export function parseSlitherOutput(rawJson: string): ParsedFinding[] {
+export function parseSlitherOutput(rawJson: string, manifest: SourceScopeManifest = { firstParty: [], dependency: [], generated: [] }): ParsedFinding[] {
   let parsed: SlitherOutput;
   try {
     parsed = JSON.parse(rawJson) as SlitherOutput;
@@ -125,7 +136,7 @@ export function parseSlitherOutput(rawJson: string): ParsedFinding[] {
       line,
       description: detector.description,
       source: "slither",
-      scope: extractScope(detector.elements),
+      scope: extractScope(detector.elements, manifest),
     };
   });
 }
@@ -135,6 +146,7 @@ export function classifySlitherResult(
   exitCode: number,
   stderr: string,
   contractsTargeted: number,
+  manifest: SourceScopeManifest = { firstParty: [], dependency: [], generated: [] },
 ): StaticAnalysisResult {
   if (["TIMEOUT", "OUTPUT_LIMIT", "ABORTED", "SPAWN_FAILED"].includes(stderr)) {
     return {
@@ -188,7 +200,7 @@ export function classifySlitherResult(
     };
   }
 
-  const findings = parseSlitherOutput(rawJson);
+  const findings = parseSlitherOutput(rawJson, manifest);
 
   return {
     status: "PASS",

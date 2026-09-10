@@ -143,6 +143,16 @@ describe("discoverSolidityFiles", () => {
     expect(result.rejected.length).toBeGreaterThan(0);
   });
 
+  it("stops traversing after the global entry budget is exhausted", () => {
+    for (let i = 0; i < 10; i++) createFile(`noise/file-${i}.txt`, "noise");
+    createFile("src/Vault.sol", "pragma solidity ^0.8.0;");
+
+    const result = discoverSolidityFiles(TEST_DIR, { maxEntries: 5 });
+
+    expect(result.reasonCodes).toContain("max_entries_exceeded");
+    expect(result.rejected.some((item) => item.reason === "max_entries_exceeded")).toBe(true);
+  });
+
   it("rejects symlinks", () => {
     createFile("src/Real.sol", "pragma solidity ^0.8.0;");
     const linkPath = path.join(TEST_DIR, "src/Linked.sol");
