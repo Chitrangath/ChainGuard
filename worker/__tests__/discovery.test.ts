@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "fs";
 import * as path from "path";
 import { discoverSolidityFiles, type DiscoveryResult } from "../discovery";
+import { selectSingleProjectRoot } from "../project-root-policy";
+import { calculateRisk } from "../../src/lib/risk-engine";
 
 const TEST_DIR = "/tmp/guardrails-test-discovery";
 
@@ -181,6 +183,12 @@ describe("discoverSolidityFiles", () => {
     createFile("beta/src/B.sol", "pragma solidity 0.8.20;");
     const result = discoverSolidityFiles(TEST_DIR);
     expect(result.projectRoots).toEqual([path.join(TEST_DIR, "alpha"), path.join(TEST_DIR, "beta")]);
+    const policy = selectSingleProjectRoot(result.projectRoots);
+    expect(policy).toMatchObject({ rootsDiscovered: 2, rootsAnalyzed: 1, incomplete: true, reason: "additional_roots_not_analyzed" });
+    expect(calculateRisk({
+      severityCounts: { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 },
+      compilationStatus: "PASS", testStatus: "PASS", securityAnalysisStatus: "PASS", coverage: "PARTIAL",
+    })).toMatchObject({ riskScore: null, deploymentStatus: "BLOCKED", gateReasons: ["INCOMPLETE_ANALYSIS"] });
   });
 
   it("handles total source size limit", () => {
